@@ -1,0 +1,141 @@
+import {DEFAULTS,Player,CollisionWorld,FixedClock,clamp} from './physics.js';
+import {createLevel} from './level.js';
+import {WorldView} from './render.js';
+import {Input} from './input.js';
+import {AudioFX} from './audio.js';
+
+const $=id=>document.getElementById(id),canvas=$('game');
+const settingsKey='kinetic-fps-settings-v1';
+const controls=[
+ ['walkSpeed','Velocidad al caminar',1,7,0.1,'m/s'],['runSpeed','Carrera normal',4,10,0.1,'m/s'],
+ ['sprintSpeed','Velocidad de sprint',8,16,0.1,'m/s'],['acceleration','Aceleración',15,85,1,'m/s²'],
+ ['friction','Fricción / frenado',2,15,0.1,'s⁻¹'],['jumpSpeed','Impulso de salto',4,12,0.1,'m/s'],
+ ['gravity','Gravedad',12,38,0.5,'m/s²'],['slideBoost','Impulso del deslizamiento',0,5,0.1,'m/s'],
+ ['slideDuration','Duración máxima del slide',0.4,2.4,0.05,'s'],['slideDrag','Desaceleración del slide',1,10,0.1,'m/s²'],
+ ['airControl','Control aéreo',0,0.8,0.01,'×'],['sensitivity','Sensibilidad',0.25,2.5,0.05,'×'],
+ ['hFov','Campo de visión horizontal',75,120,1,'°'],['cameraMotion','Movimiento de cámara',0,1.5,0.05,'×'],
+ ['recoil','Retroceso visual',0,1.5,0.05,'×'],['resolution','Escala de resolución',0.55,1.25,0.05,'×']
+];
+const params={...DEFAULTS};
+try{
+  const saved=JSON.parse(localStorage.getItem(settingsKey)||'null');
+  if(saved){for(const [key,,min,max]of controls)if(Number.isFinite(saved[key]))params[key]=clamp(saved[key],min,max);
+    for(const key of ['autoSprint','autoResolution','contextualSlide','sound'])if(typeof saved[key]==='boolean')params[key]=saved[key];}
+}catch{}
+const saveSettings=()=>{try{localStorage.setItem(settingsKey,JSON.stringify(params));}catch{}};
+let playing=false,started=false,view,input,player,level,clock,frame=0,lastTime=0;
+let fps=60,frameCount=0,frameSum=0,hudTime=0,hitTimer=0,hits=0,shots=0,nextShot=0,playTime=0,footDistance=0,autoTime=0;
+const audio=new AudioFX(params);
+function toast(message){$('toast').textContent=message;$('toast').style.opacity='1';clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').style.opacity='0',2200);}
+function tab(name){for(const button of document.querySelectorAll('[data-tab]'))button.classList.toggle('active',button.dataset.tab===name);for(const id of ['settings','map','controls'])$('tab-'+id).hidden=id!==name;if(name==='map')drawMap($('pause-map'),true);}
+function pause(settings=false){
+  if(!started)return;playing=false;input.active=false;input.clear();clock.reset();
+  $('pause').hidden=false;$('touch-controls').hidden=true;$('hud').hidden=true;
+  if(document.pointerLockElement)document.exitPointerLock();if(settings)tab('settings');
+}
+async function start(){
+  if(!view)return;
+  audio.unlock();
+  if(!input.touchMode){
+    try{
+      const lock=canvas.requestPointerLock();if(lock&&typeof lock.then==='function')await lock;
+    }catch{
+      if(!started)$('start-help').textContent='Haz clic de nuevo para capturar el cursor. Abre la página directamente, fuera de visores incrustados.';
+      else document.querySelector('.settings-note').textContent='Vuelve a pulsar CONTINUAR para capturar el cursor.';
+      return;
+    }
+  }
+  playing=true;started=true;input.active=true;input.clear();clock.reset();lastTime=performance.now();
+  $('welcome').hidden=true;$('pause').hidden=true;$('hud').hidden=false;$('touch-controls').hidden=!input.touchMode;
+  // Fullscreen is optional. Safari can play directly in the normal viewport.
+  if(input.touchMode&&!document.fullscreenElement&&document.documentElement.requestFullscreen){try{await document.documentElement.requestFullscreen();}catch{}}
+}
+function reset(){player.reset();input.clear();input.yaw=level.spawn.yaw;input.pitch=0;view.eye=1.67;view.landing=0;view.recoil=0;clock.reset();toast('Punto de inicio restablecido');}
+function drawMap(container,withPlayer){
+  if(!level)return;let shapes='';
+  for(const v of level.visuals){
+    if(v.id==='ground'||v.id==='route'||v.id.includes('lip')||v.id.includes('fascia')||v.id.includes('trim')||v.id.includes('rib'))continue;
+    const fill=['teal','coral','yellow'].includes(v.mat)?({teal:'#67c7ad',coral:'#b56f59',yellow:'#bdab76'}[v.mat]):v.mat==='asphalt'?'#314b53':'#4b666b';
+    if(v.type==='box')shapes+=`<rect x="${v.x-v.w/2}" y="${v.z-v.d/2}" width="${v.w}" height="${v.d}" fill="${fill}" stroke="#98b8af" stroke-opacity=".2" stroke-width=".12" transform="rotate(${v.angle*180/Math.PI} ${v.x} ${v.z})"/>`;
+    else shapes+=`<polygon points="${v.poly.map(p=>p.join(',')).join(' ')}" fill="${fill}" stroke="#b1d4c2" stroke-opacity=".35" stroke-width=".2"/>`;
+  }
+  const path='M0 39 L-3 23 L-3 9 L-3 -8 L25 -8 L25 2 L14 2 L14 18 L14 30 L43 30 L43 -19 L11 -19 L11 -35 L-17 -35 L-17 -21 L-34 -21 L-34 -12 L-29 -10 L-16 -10 L-16 20 L-3 20 L0 39';
+  const x=withPlayer?player.x:0,z=withPlayer?player.z:39,yaw=withPlayer?input.yaw:0;
+  container.innerHTML=`<svg viewBox="-53 -53 106 106" role="img" aria-label="Plano de las seis zonas de NODO 09"><defs><pattern id="grid-${withPlayer?'p':'w'}" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M5 0H0V5" fill="none" stroke="#92b4ae" stroke-opacity=".12" stroke-width=".15"/></pattern></defs><rect x="-50" y="-50" width="100" height="100" fill="url(#grid-${withPlayer?'p':'w'})"/>${shapes}<path d="${path}" fill="none" stroke="#91e7be" stroke-width=".65" stroke-dasharray="1.8 1.4" opacity=".8"/>${[[0,30,'01'],[-30,-1,'02'],[28,11,'03'],[3,-31,'04'],[43,0,'05'],[0,-15,'06']].map(([a,b,t])=>`<circle cx="${a}" cy="${b}" r="3.2" fill="#203b43"/><text x="${a}" y="${b+1.1}" text-anchor="middle" font-family="Arial" font-size="3" fill="#dce9d5">${t}</text>`).join('')}<g transform="translate(${x} ${z}) rotate(${-yaw*180/Math.PI})"><circle r="3.4" fill="#8ff6d3" fill-opacity=".15"/><path d="M0 -2.8L1.8 2L0 1L-1.8 2Z" fill="#b5ffe0"/></g></svg>`;
+}
+function setupSettings(){
+  for(const [key,title,min,max,step,unit]of controls){
+    const wrap=document.createElement('div');wrap.className='setting';
+    wrap.innerHTML=`<label for="setting-${key}">${title}<output id="value-${key}" for="setting-${key}"></output></label><input id="setting-${key}" type="range" min="${min}" max="${max}" step="${step}" value="${params[key]}">`;
+    $('sliders').append(wrap);
+    const el=$('setting-'+key);el.addEventListener('input',()=>{params[key]=Number(el.value);refreshSettings();saveSettings();if(key==='resolution')view?.resize(innerWidth,innerHeight,true);});
+  }
+  for(const key of ['autoSprint','autoResolution','contextualSlide','sound'])$(key).addEventListener('change',()=>{params[key]=$(key).checked;if(key==='autoResolution'&&!params[key]){view.dynamicScale=1;view.resize(innerWidth,innerHeight,true);}saveSettings();});
+  $('defaults').addEventListener('click',()=>{Object.assign(params,DEFAULTS);view.dynamicScale=1;refreshSettings();view.resize(innerWidth,innerHeight,true);saveSettings();});
+  refreshSettings();
+}
+function refreshSettings(){
+  for(const [key,,,max,step,unit]of controls){$('setting-'+key).value=params[key];$('value-'+key).textContent=(step>=1?params[key].toFixed(0):params[key].toFixed(step===0.01||step===0.05?2:1))+' '+unit;}
+  for(const key of ['autoSprint','autoResolution','contextualSlide','sound'])$(key).checked=params[key];
+}
+function tick(now){
+  frame=requestAnimationFrame(tick);const dt=Math.min((now-lastTime)/1000||0,0.1);lastTime=now;
+  let alpha=1;
+  if(playing){
+    playTime+=dt;input.speed=player.speed;
+    alpha=clock.advance(dt,h=>{
+      const wasSlide=player.sliding,sample=input.sample(true);player.step(h,sample);
+      if(player.jumpEvent)view.onJump();if(player.landEvent){view.onLand(player.landImpact);if(player.landImpact>4)audio.sound('land');}
+      if(!wasSlide&&player.sliding)audio.sound('slide');
+      if(player.grounded&&!player.sliding&&player.speed>1.5){footDistance+=player.speed*h;if(footDistance>2.6){footDistance=0;audio.sound('step');}}
+    });
+    const sampled=input.sample(false);view.update(dt,player,sampled,alpha);
+    nextShot-=dt;
+    if(sampled.fire&&nextShot<=0){
+      const hit=view.shoot();audio.sound('shot');shots++;nextShot+=0.105;
+      if(hit.target){hits++;hitTimer=0.12;audio.sound('hit');$('hits').textContent=String(hits).padStart(2,'0');}
+    }
+    if(!sampled.fire)nextShot=Math.max(0,nextShot);
+    $('reticle').classList.toggle('aim',sampled.aim);input.lookDX=0;input.lookDY=0;
+    hitTimer=Math.max(0,hitTimer-dt);$('hitmarker').style.opacity=hitTimer>0?'1':'0';
+    $('chain-hint').style.opacity=playTime>18?'0':'1';
+  }else if(!started){
+    view.update(dt,player,{yaw:0,pitch:0.01,x:0},1);
+  }
+  // Render while paused at 30 Hz, reducing battery use without hiding the environment.
+  if(playing||frameCount%2===0)view.render();
+  frameCount++;frameSum+=dt;hudTime+=dt;autoTime+=dt;
+  if(frameSum>=0.5){fps=frameCount/frameSum;frameCount=0;frameSum=0;}
+  if(hudTime>=0.12){
+    hudTime=0;$('fps').textContent=String(Math.round(fps));$('speed').textContent=player.speed.toFixed(1);$('state').textContent=player.state;
+    $('ground').textContent=player.grounded?'● SUELO':'○ AIRE';$('speed-fill').style.width=Math.min(100,player.speed/18*100)+'%';
+    const zone=level.zones.find(z=>Math.abs(player.x-z.x)<z.w/2&&Math.abs(player.z-z.z)<z.d/2);$('zone').textContent=zone?.name||'ENLACE EXTERIOR';
+    $('render-stats').textContent=`120 Hz · ${view.stats.calls} llamadas · ${Math.round(view.stats.triangles/1000)}k triángulos · ${Math.round(view.scale*100)}% píxel CSS`;
+  }
+  if(autoTime>3&&playing&&params.autoResolution){autoTime=0;
+    const next=fps<49?Math.max(0.62,view.dynamicScale-0.08):fps>58?Math.min(1,view.dynamicScale+0.035):view.dynamicScale;
+    if(next!==view.dynamicScale){view.dynamicScale=next;view.resize(innerWidth,innerHeight,true);}
+  }
+}
+try{
+  level=createLevel();player=new Player(new CollisionWorld(level.solids),params,level.spawn);clock=new FixedClock();
+  view=new WorldView(canvas,level,params);input=new Input(canvas,params,pause,reset);
+  setupSettings();drawMap($('welcome-map'),false);
+  if(input.touchMode)$('start-help').textContent='Joystick · Mirada táctil · Botones simultáneos';
+  view.resize(innerWidth,innerHeight,true);
+  window.addEventListener('resize',()=>{view.resize(innerWidth,innerHeight,true);input.clear();clock.reset();});
+  window.visualViewport?.addEventListener('resize',()=>view.resize(innerWidth,innerHeight));
+  canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();pause();$('fatal-text').textContent='El navegador liberó el contexto gráfico. Recarga para volver al punto inicial; tus ajustes se conservarán.';$('fatal').hidden=false;});
+  canvas.addEventListener('webglcontextrestored',()=>location.reload());
+  document.addEventListener('pointerlockerror',()=>{if(started)pause();else $('start-help').textContent='Vuelve a pulsar INICIAR para permitir la captura del mouse.';});
+  $('start').disabled=false;$('load-status').hidden=true;
+  $('start').addEventListener('click',start);$('resume').addEventListener('click',start);
+  $('settings-button').addEventListener('click',()=>pause(true));$('map-button').addEventListener('click',()=>{pause();tab('map');});
+  $('reset-position').addEventListener('click',()=>{reset();drawMap($('pause-map'),true);});
+  for(const b of document.querySelectorAll('[data-tab]'))b.addEventListener('click',()=>tab(b.dataset.tab));
+  lastTime=performance.now();requestAnimationFrame(tick);
+  // Read-only diagnostics are useful for reproducible desktop QA and user reports.
+  window.kinetic={snapshot:()=>({playing,position:{x:player.x,y:player.y,z:player.z},velocity:{x:player.vx,y:player.vy,z:player.vz},speed:player.speed,state:player.state,grounded:player.grounded,height:player.height,horizontalFov:params.hFov,verticalFov:view.camera.fov,aspect:view.camera.aspect,fps,drawCalls:view.stats.calls,triangles:view.stats.triangles,shots,hits,params:{...params}})};
+}catch(error){
+  console.error(error);$('load-status').hidden=true;$('fatal-text').textContent=error.message+' — Abre el proyecto mediante GitHub Pages (HTTPS), con todos sus archivos en la misma carpeta.';$('fatal').hidden=false;
+}
