@@ -1,102 +1,81 @@
-# KINETIC FPS · Informe de entrega
+# NODO 09 · Informe V2 · 7 de noviembre de 2026
 
-Versión 01.0 · 7 de noviembre de 2026.
+## Procedencia y conservación
 
-## Qué contiene
+Se trabajó desde los archivos reales de https://github.com/IzayTO/KINEtiK, revisión `3b8b4d5d0fc550607b9b8832e48d790498d92229`. Se verificó que los 16 archivos descargados previamente coincidían byte por byte con el contenido del repositorio mediante sus hashes Git.
 
-Aplicación estática HTML/CSS/JavaScript con Three.js 0.170.0 incluido. No descarga motores, modelos, sonidos ni fuentes desde terceros al iniciar. La escena es 3D interactiva, con arma y brazos tridimensionales y disparos por intersección geométrica. No utiliza un vídeo ni una representación 2D para simular el juego.
+`physics.js`, `level.js` y `render.js` originales se conservan sin cambiar sus bytes. Las ampliaciones del render viven en `world-v2.js`, que hereda la cámara y la capa de movimiento originales. `refinements.js` agrega acabados visuales después de crear el mapa; no modifica ninguno de los 139 sólidos de colisión.
 
-La plataforma prevista es Safari de iPhone con WebGL2, Chrome y Edge. No se añadió un proceso de compilación. Todos los archivos del paquete se sitúan en la raíz.
+No hubo cambios inevitables en la física. Se conservaron caminar 4.2 m/s, carrera 7.4 m/s, sprint 11.5 m/s, aceleración 46 m/s², fricción 8 s⁻¹, salto 8.6 m/s, gravedad 24 m/s², impulso slide 2.6 m/s, duración 1.25 s, desaceleración 4.2 m/s², control aéreo 0.34 y FOV horizontal inicial 100°. Se siguen cargando los ajustes personalizados V1. El reloj sigue a 120 Hz con los mismos subpasos y límites de delta.
 
-## Movimiento y colisiones
+## Fase A · Control
 
-El controlador usa un cilindro cinemático vertical de radio 0.31 m. Tiene tapas planas para simplificar el apoyo estable en escalones. Es una alternativa ligera a un motor de cuerpos rígidos: no incluye simulación de articulaciones, empuje de objetos ni ragdoll.
+- Editor sobre la vista del juego, con entradas y simulación suspendidas, render activo y posición, velocidad y cámara conservadas. Selección, arrastre, tamaños, opacidad individual, guardar/cancelar/restaurar/vista previa. Dieciséis elementos reales, incluido el menú. Coordenadas normalizadas dentro de áreas seguras y almacenamiento por orientación. El selector y el asa superior permiten mover elementos cubiertos por la barra. No se recrean los nodos al abrirlo.
+- ADS resuelto a partir del eje entre alza y punto delantero. Se interpola hacia una transformación que lleva ambos al eje -Z de la cámara del arma; a ADS completo no queda desplazamiento lateral ni rotación por balanceo. El disparo usa el centro óptico de la cámara del mundo. El retroceso visual ADS es longitudinal.
+- Cinco variantes de retícula, parámetros persistentes y expansión calculada desde el cono real de dispersión y la proyección de cámara. Retícula inicial de segmentos de 1 px.
+- Sensibilidad horizontal/vertical/ADS para mouse y táctil, inversión y multiplicador global original.
+- Minimapa Canvas 2D construido una vez desde las descripciones geométricas, con jugador, rumbo, referencias, límites y marcador. Actualización máxima 10 Hz, sin segunda cámara 3D.
+- Marcador por primer impacto en arquitectura. Si la dirección no encuentra una superficie interior válida, se busca suelo con espacio para el personaje dentro del recinto. Un único marcador reutilizado, distancia y pulso breve.
 
-Alturas: 1.82 m de pie, 1.02 m agachado y 0.76 m deslizando. El espacio sobre la cabeza se comprueba antes de aumentar la altura. La cámara baja suavemente y se limita también contra el techo mientras desciende.
+## Fase B · Combate
 
-La física avanza a 120 Hz mediante acumulador, independientemente del render. Cada desplazamiento se subdivide adicionalmente a un máximo de 12 cm. Se separa la resolución horizontal de la vertical. El contacto usa prismas convexos, planos inclinados analíticos y un índice espacial de celdas de 8 m. Las colisiones y las superficies visibles nacen de la misma definición del nivel.
+- Tres ranuras: cuchillo inverso, rifle largo K-09 y escopeta de corredera S-07. Sin pistola ni inventario.
+- K-09 con 30 cartuchos, cadencia de 0.105 s, auto/semi y recarga de 1.55 s. La recarga mueve cargador y brazo; la reserva es ilimitada.
+- S-07 con siete cartuchos, nueve rayos por disparo, caída de daño por distancia, intervalo de bombeo 0.82 s y alimentación cartucho por cartucho. Se puede interrumpir para disparar si hay munición. El cambio de arma no reinicia su tiempo de bombeo.
+- Cuchillo con hoja orientada hacia el antebrazo, brazo superior, antebrazo y muñeca animados. Corte cruzado, retorno y descendente, con impacto diferido en la fase de ataque. Alcance 2.2 m, ángulo limitado y comprobación de pared. Un impacto válido elimina al maniquí. No altera el movimiento.
+- Doce maniquíes con cabeza, torso, brazos y piernas, 100 puntos de vida y zonas diferenciadas. Reaparecen a los cuatro segundos; sin IA ni ragdoll.
+- Asistencia a pecho superior, activada por defecto para táctil: moderación de sensibilidad y corrección pequeña limitada por la entrada manual. Comprueba visibilidad y rango, también al aplicar la ayuda; no actúa sin movimiento de mirada y no redirige los disparos.
+- Estados de armas independientes del controlador. Sprint, slide, salto, caída, aterrizaje y disparo conservan la capa de movimiento de brazos; las nuevas recargas, bombeo y ataques la complementan.
 
-Se incluyen: escalones de hasta 0.32 m; apoyo estable al bajar rampas; deslizamiento tangencial contra paredes; coyote time de 105 ms; buffer de salto de 140 ms. Al regresar de una pestaña en segundo plano se vacía el acumulador, evitando simular de golpe toda la ausencia.
+## Fase C · Arquitectura y legibilidad
 
-| Parámetro inicial | Valor |
-|---|---:|
-| Caminar | 4.2 m/s |
-| Carrera normal | 7.4 m/s |
-| Sprint | 11.5 m/s |
-| Aceleración | 46 m/s² |
-| Fricción de suelo | 8 s⁻¹ |
-| Impulso de salto | 8.6 m/s |
-| Gravedad | 24 m/s² |
-| Impulso de slide | +2.6 m/s, limitado |
-| Duración máxima de slide | 1.25 s |
-| Desaceleración de slide | 4.2 m/s² |
-| Control aéreo | 0.34 × aceleración |
+Se conserva la distribución industrial de seis zonas y su paleta gris, turquesa y naranja. Se añadieron jambas y remates de accesos existentes, placas de apoyo en pilares/vigas, uniones de la grúa, zócalos y pequeños acentos en pasos técnicos. No se añadieron obstáculos a las rutas.
 
-El slide gira gradualmente su vector de velocidad y aplica desaceleración real. Las pendientes influyen en su impulso. Saltar conserva prácticamente toda la velocidad horizontal. El aterrizaje no la reinicia. Existe un límite general de velocidad y un límite adicional para el impulso del slide, con recuperación mínima, de modo que repetir la combinación no acumula velocidad indefinidamente.
+Se separaron ligeramente los tonos de pavimento, asfalto, acero y superficies claras. Se conserva la iluminación hemisférica/direccional y el sombreado estático sencillo del original. No se añadieron sombras dinámicas, postprocesamiento, texturas grandes ni shaders especiales. Los tres modelos de armas tienen siluetas propias y componentes móviles independientes.
 
-## Cámara, brazos y disparo
+## Fase D · Optimización y pruebas ejecutadas
 
-La conversión de cámara es `vertical = 2 × atan(tan(horizontal / 2) / aspecto)`. A un aspecto 19.5:9, 100° horizontales equivalen a 57.625° verticales. Al redimensionar la ventana se recalcula la proyección. Apuntar interpola a 76° horizontales con los valores iniciales.
+Los doce maniquíes se agrupan en cuatro mallas instanciadas. Las piezas estáticas de las armas se combinan por material; solo se presenta el arma equipada. Los efectos usan el pool original de 16 impactos y un trazador reutilizado. El marcador es único. El plano del minimapa se genera una vez y el HUD se actualiza con frecuencia limitada. Continúan el límite de densidad de píxeles y la resolución adaptativa originales. El cálculo de FPS ahora utiliza el tiempo real del cuadro, aunque el delta físico siga limitado.
 
-La mirada responde directamente al mouse o al dedo. La suavidad se aplica al cuerpo, balanceo, arma y transiciones, sin filtrar en exceso la dirección de apuntado. No se aplica un aumento artificial del FOV al esprintar.
+**62 comprobaciones automáticas correctas:** 24 del movimiento original, 22 nuevas de combate/geometría/configuración y 16 de DOM/controles. Las primeras 46 se ejecutaron en Node y en Chrome; las 16 del HUD se ejecutaron en Chrome con los elementos y manejadores reales, mediante eventos sintéticos. No se cuentan como pruebas adicionales las repeticiones de una misma comprobación.
 
-Los antebrazos, puños, palmas y dedos son geometría low-poly. La postura de los dedos es fija; las cadenas de los brazos y el conjunto del rifle reaccionan al movimiento y se interpolan. Las piezas estáticas de cada brazo se agrupan para reducir llamadas de dibujo. El arma se renderiza en una segunda escena, después de limpiar la profundidad, un recurso habitual para mantener legibles las manos junto a paredes. Las colisiones pertenecen al personaje, no a cada dedo o al cañón.
+Se verificaron sprint, diagonal, frenado, impulso y desaceleración slide, slide jump, aterrizaje/encadenamiento, coyote/buffer, control aéreo, agachado bajo techo, paredes finas, esquinas, escalones, rampas y recorridos originales. Una comparación adicional de **12 000 pasos** frente al controlador V1 produjo posiciones, velocidades, alturas y estados exactamente iguales. La simulación y cadencia coinciden a 30/60/144 Hz de cuadros suministrados al reloj fijo; esto no representa una medición de FPS gráficos.
 
-El rifle K-09 dispara aproximadamente 9.52 veces por segundo. Tiene munición ilimitada para facilitar la prueba, un fogonazo breve, impactos reutilizables, confirmación de blanco, retroceso visual y sonido procedural opcional. El raycasting parte del centro de la cámara e impacta primero en la estructura más cercana. El disparo no modifica la velocidad del jugador ni introduce una dispersión aleatoria que oculte la precisión.
+Se probaron cargadores, recargas, auto/semi, bombeo, perdigones, cambio de arma, cuchillo, daños/zonas/oclusiones, marcador y ADS en 18 combinaciones de arma, FOV y proporción de pantalla. También 720 pasos de movimiento con disparos, cambios y animaciones sin modificar posición ni velocidad del controlador.
 
-## NODO 09: diseño del mapa
+El HUD pasó selección, arrastre, tamaño y centro, opacidad cero, guardado/restauración/cancelación, reconstrucción desde localStorage, perfiles separados, límites matemáticos, varios pointerId simultáneos, cancelación de dedos, sensibilidad y bloqueo exacto de posición/cámara/velocidad. Reabrirlo seis veces no aumentó la cantidad de nodos. No se realizó una rotación física de teléfono; se verificaron los perfiles y cálculos de orientación.
 
-Superficie interior de referencia: 96 × 96 m. No hay distribución aleatoria de edificios. El conjunto representa un campus de mantenimiento: nave de reparación al oeste, transferencia en el centro, terrazas y paso de servicio al este, control al norte y patio de llegada al sur.
+### Mediciones y límites
 
-| Zona | Función espacial y de movimiento |
-|---|---|
-| 01 Patio | Aproximación para acelerar; paso de 1.12 m y rampa hacia la pasarela. |
-| 02 Taller | Nave con cubierta dentada, vanos, bancos, pilares, entreplanta y 16 escalones de 20 cm. |
-| 03 Terrazas | Rampa, niveles de 2.4 y 3.2 m, separación de 3 m para saltar y descenso alternativo. |
-| 04 Control | Interior atravesable con accesos separados y cubierta de 6.4 m mediante rampa exterior. |
-| 05 Vía rápida | Corredor perimetral largo para alcanzar y comprobar velocidad. |
-| 06 Transferencia | Pasarela que enlaza taller y terrazas; circulación bajo el puente y referencia vertical central. |
+Recuento del grafo Three.js en Node, sin atlas de señales Canvas, incluyendo geometría de armas inactivas y efectos reservados:
 
-El recorrido principal enlaza patio, paso bajo, rampa, plataforma, pasarela, salto a las terrazas y regreso exterior. Hay alternativas a nivel de suelo bajo las conexiones elevadas. Las proporciones de puertas, columnas, apoyos y dinteles corresponden a la misma geometría que resuelve el controlador.
+| Dato | V1 | V2 |
+|---|---:|---:|
+| Triángulos totales descritos | 7 500 | 5 946 |
+| Mallas | 70 | 68 |
+| Objetos del grafo | 118 | 102 |
+| Materiales únicos | 47 | 44 |
+| Buffers CPU únicos de geometría e instancias | 452 352 bytes | 142 052 bytes |
+| Lotes de mallas visibles antes del descarte por cámara | 53 | 35 |
 
-Las zonas se distinguen mediante materiales y acentos: hormigón claro, pavimento oscuro, acero azul grisáceo, señalización turquesa, amarillo en bordes y un puente grúa coral como hito. La señalización y el plano sirven para orientarse; no hay objetivos, misiones ni historia añadidos.
+Estos lotes **no son draw calls medidos**. En Chrome, el atlas de señales añade una malla y 22 triángulos, compartidos con la versión original. La reducción de geometría no demuestra por sí sola un aumento de FPS.
 
-## Rendimiento
+Microbenchmark de CPU del contenedor: controlador V1 0.00206 ms/paso; V2 0.00200 ms/paso (20 000 pasos, después de calentamiento). Actualización de cámara/pose V2 0.01221 ms y búsqueda de candidato de asistencia 0.06259 ms, en sus cargas sintéticas. Son cifras de este entorno, sensibles al equipo y a la carga; no predicen Safari.
 
-La escena completa contiene aproximadamente 7.5 mil triángulos, incluidos los modelos de primera persona y efectos reservados. Las cajas arquitectónicas se agrupan con InstancedMesh por material; los prismas se combinan por material. Los blancos y las piezas del arma también se agrupan. El número de llamadas de dibujo real varía con la visibilidad y se muestra en Ajustes.
+En Chrome de escritorio, 200 actualizaciones reales de Canvas 2D del minimapa promediaron aproximadamente **0.0055 ms de CPU** por actualización. La lectura aproximada del heap JS de esa sesión fue 6 807 232 bytes; no incluye memoria gráfica ni constituye un límite de memoria del juego.
 
-Se utilizan materiales simples, una luz hemisférica y una direccional, cielo liso y niebla de distancia sencilla. No hay mapas de sombras, reflejos, volumétricos ni cadena de postprocesado. Las sombras de contacto son superficies estáticas discretas. El mapeo tonal se realiza en el material, sin un pase de pantalla adicional.
+**No se midieron FPS 3D, tiempo GPU ni draw calls de una partida renderizada:** WebGL está desactivado en el navegador de este entorno. La interfaz se ejecutó mediante el modo explícito de diagnóstico sin 3D; los raycasts, geometrías, matrices y proyecciones Three.js sí son reales. El modo normal sigue usando WebGL y no sustituye el juego por una imagen. No se intentó probar ni emular un iPhone. Quedan pendientes la revisión visual con GPU, la comodidad táctil física y el rendimiento sostenido real.
 
-La densidad de píxel inicial se limita a 1.6; puede bajar automáticamente si la tasa observada se mantiene baja. El usuario también dispone de escala manual. Los efectos de impacto están en un conjunto reutilizable de 16 elementos. La geometría no se reconstruye cada fotograma y los nodos de sonido se desconectan al terminar.
+## Archivos
 
-## Pruebas realmente ejecutadas
+Modificados: `index.html`, `style.css`, `input.js`, `game.js`, `README.md`, `INFORME.md`, `tests.html`, `verify-scene.js` (entrada de compatibilidad para las nuevas pruebas).
 
-**41 / 41 comprobaciones automáticas correctas en Chrome.** De ellas, 36 también se ejecutaron en Node. Las cinco adicionales utilizan eventos de puntero sintéticos del navegador.
+Nuevos: `preferences.js`, `hud.js`, `settings-v2.js`, `combat.js`, `weapon-models.js`, `world-v2.js`, `refinements.js`, `verify-v2.js`, `verify-hud.js`, `PRUEBAS.json`.
 
-| Caso solicitado | Qué se comprobó |
-|---|---|
-| A Velocidad | Aceleración, sprint de 11.50 m/s, igualdad de diagonal y recta, frenado con inercia. |
-| B Slide | Velocidad medida: 11.50 → 14.06 m/s al iniciar → 11.54 m/s tras 0.6 s. |
-| C Slide jump | 13.64 → 13.61 m/s al saltar, conservando el impulso horizontal. |
-| D Encadenamiento | Catorce combinaciones seguidas sin velocidad infinita; última velocidad 14.10 m/s. |
-| E Arquitectura | Pared de 6 cm a 18 m/s, esquinas, escalones, rampas, techos, coyote time, buffer y recorridos del mapa. |
-| F Disparo | Intersecciones Three.js sobre blancos al correr, deslizarse y saltar; una estructura bloquea el rayo; disparar no cambia la velocidad. |
-| G Entrada táctil | Cuatro pointerId simultáneos: movimiento, mirada, disparo y salto. Cancelación independiente, arrastre sobre disparo y acción contextual. Eventos sintéticos, sin emulación de dispositivo. |
-| H Independencia temporal | 480 pasos físicos con render supuesto a 30, 60 y 144 FPS; posiciones iguales con diferencia menor de 0.0000001 m. |
+Conservados byte por byte: `physics.js`, `level.js`, `render.js`, `audio.js`, `verify.js`, `three.module.min.js`, `THREE-LICENSE.txt`, `icon.svg`.
 
-También se comprobaron geometría finita, correspondencia entre rampa visual y colisión, transformaciones de animación sin valores inválidos, cámara bajo techo, desactivación de sus efectos y aplicación efectiva de ajustes de velocidad y gravedad.
+## Simplificaciones y problemas pendientes
 
-**Límite de verificación:** el navegador de este entorno informa `GL_RENDERER = Disabled` y no permite crear un contexto WebGL. Por tanto, no se validó una sesión gráfica interactiva ni se midieron FPS de render. Los tests de raycasting y animación operaron sobre el grafo Three.js real, sin dibujarlo. No se intentó probar ni emular un iPhone. La presentación final, la comodidad táctil y el rendimiento en el dispositivo quedan para la prueba de uso del usuario; no se declaran aprobados.
+No quedaron fallos en las comprobaciones ejecutadas. La validación gráfica indicada arriba sigue pendiente. Los maniquíes son blancos de raycast, no cuerpos rígidos ni enemigos; su desaparición/reaparición reemplaza animaciones de muerte. Las manos conservan articulación simplificada; no hay animación individual compleja de dedos. Los sonidos reutilizan los efectos sintéticos ligeros originales. No se agregaron sombras dinámicas para mantener el coste original. Los datos locales dependen de que Safari permita almacenamiento; si no, el HUD se aplica durante la sesión y se avisa al guardar.
 
-Para repetir las comprobaciones, abre `tests.html` desde la misma web publicada y pulsa **Ejecutar pruebas**. Esa página es opcional y no forma parte del bucle del juego.
-
-## Referencias consultadas
-
-Se aplicaron principios de conectividad, alternancia entre interiores y exteriores, recorridos elevados y separación funcional de edificios. No se copió la geometría completa de un mapa comercial.
-
-- Activision, Shoot House Map Intel: rutas principales, conexiones y posiciones elevadas. https://www.callofduty.com/blog/2022/11/modern-warfare-ii-shoot-house-map-intel-guide-season-01
-- Christopher Dionne / Respawn, GDC 2018, resumen público de “Designing Unforgettable Titanfall Single Player Levels with Action Blocks”: secuencias breves diseñadas alrededor de acciones. Se consultó el resumen de la sesión, no se afirma haber visto su vídeo completo. https://www.gdcvault.com/play/1025105/Designing-Unforgettable-Titanfall-Single-Player
-- allmannwappner, Construction depot, Poing: programa de talleres, mantenimiento y administración en edificios de proporciones distintas. https://www.allmannwappner.com/en/projekte/13173/construction-depot-poing
-- Three.js, PerspectiveCamera: el FOV de la cámara es vertical. https://threejs.org/docs/pages/PerspectiveCamera.html
-- Three.js, Raycaster: intersecciones ordenadas por distancia. https://threejs.org/docs/pages/Raycaster
-- GitHub, publicar desde una rama y la raíz. https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site
+El ZIP contiene archivos exclusivamente en su raíz, con dependencias relativas locales, listo para reemplazar los archivos en GitHub Pages. No se publicó ni modificó el repositorio remoto.

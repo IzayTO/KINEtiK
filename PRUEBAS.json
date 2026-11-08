@@ -1,0 +1,399 @@
+{
+  "commit": "3b8b4d5d0fc550607b9b8832e48d790498d92229",
+  "unchanged": {
+    "physics": true,
+    "level": true,
+    "renderBase": true,
+    "params": {
+      "walkSpeed": 4.2,
+      "runSpeed": 7.4,
+      "sprintSpeed": 11.5,
+      "acceleration": 46,
+      "friction": 8,
+      "jumpSpeed": 8.6,
+      "gravity": 24,
+      "slideBoost": 2.6,
+      "slideDuration": 1.25,
+      "slideDrag": 4.2,
+      "airControl": 0.34,
+      "sensitivity": 1,
+      "hFov": 100,
+      "cameraMotion": 0.65,
+      "recoil": 0.65,
+      "resolution": 1,
+      "autoResolution": true,
+      "autoSprint": false,
+      "contextualSlide": true,
+      "sound": true
+    }
+  },
+  "trajectoryStepsExactlyEqual": 12000,
+  "baseline": {
+    "meshes": 70,
+    "triangles": 7500,
+    "objects": 118,
+    "attributeBytesNotGPU": 473984,
+    "uniqueCPUBufferBytes": 452352,
+    "uniqueMaterials": 47,
+    "visibleMeshBatchesNotDrawCalls": 53
+  },
+  "v2": {
+    "meshes": 68,
+    "triangles": 5946,
+    "objects": 102,
+    "attributeBytesNotGPU": 155744,
+    "uniqueCPUBufferBytes": 142052,
+    "uniqueMaterials": 44,
+    "visibleMeshBatchesNotDrawCalls": 35
+  },
+  "CPUNode": {
+    "physicsMS": 0.0019965326500000005,
+    "physicsBaselineMS": 0.002063683549999999,
+    "viewCPUms": 0.012208479666666657,
+    "aimCandidateMS": 0.06258775000000003,
+    "environment": "Node CPU en contenedor; no Safari, no GPU; microbenchmark sintético, no FPS"
+  },
+  "physics": {
+    "passed": 24,
+    "total": 24,
+    "results": [
+      {
+        "name": "A · Aceleración y sprint",
+        "passed": true,
+        "detail": "11.50 m/s"
+      },
+      {
+        "name": "A · Diagonal normalizada",
+        "passed": true,
+        "detail": "Diagonal = recta"
+      },
+      {
+        "name": "A · Frenado con inercia",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "B · Impulso y desaceleración del slide",
+        "passed": true,
+        "detail": "11.50 → 14.06 → 11.54 m/s"
+      },
+      {
+        "name": "C · Slide jump conserva impulso",
+        "passed": true,
+        "detail": "13.64 → 13.61 m/s"
+      },
+      {
+        "name": "D · Encadenamiento y velocidad acotada",
+        "passed": true,
+        "detail": "14 cadenas; 14.10 m/s"
+      },
+      {
+        "name": "E · Pared fina a velocidad elevada",
+        "passed": true,
+        "detail": "Pared de 6 cm; impacto desde 18 m/s, sin cruce"
+      },
+      {
+        "name": "E · Esquina y deslizamiento lateral",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "E · Escalones de 20 cm",
+        "passed": true,
+        "detail": "10 escalones; y=2.00 m"
+      },
+      {
+        "name": "E · Escalón excesivo bloquea",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "E · Rampa analítica, ascenso y descenso",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "E · Techo impide ponerse de pie",
+        "passed": true,
+        "detail": "Altura máxima bajo techo: 1.12 m"
+      },
+      {
+        "name": "E · Salto contra techo",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Salto · Coyote time",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Salto · Buffer antes de aterrizar",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Salto · Control aéreo sin quitar impulso longitudinal",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Cámara · FOV horizontal 100°",
+        "passed": true,
+        "detail": "57.625° vertical a 19.5:9"
+      },
+      {
+        "name": "H · Física idéntica a 30 / 60 / 144 FPS",
+        "passed": true,
+        "detail": "480 pasos; posiciones coinciden a <0.0000001 m"
+      },
+      {
+        "name": "Mapa · Entrada, paso bajo y rampa central",
+        "passed": true,
+        "detail": "Paso 1.12 m → cubierta +3.20 m"
+      },
+      {
+        "name": "Mapa · Escalera del taller a pasarela",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Mapa · Rampa de terrazas y salto de plataforma",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Mapa · Cubierta del edificio de control",
+        "passed": true,
+        "detail": "+6.40 m"
+      },
+      {
+        "name": "Mapa · Interior de control de lado a lado",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Mapa · Vía rápida continua",
+        "passed": true,
+        "detail": "73.4 m recorridos"
+      }
+    ]
+  },
+  "v2Tests": {
+    "passed": 22,
+    "total": 22,
+    "results": [
+      {
+        "name": "K-09 · 30 disparos y bloqueo del cargador vacío",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "K-09 · Recarga real y reanudación",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "K-09 · Semiautomático exige pulsación nueva",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Armas · Cadencia idéntica a 30/60/144 Hz",
+        "passed": true,
+        "detail": "20 disparos en 2 s"
+      },
+      {
+        "name": "Escopeta · Siete cargas, nueve perdigones y bombeo",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Escopeta · Recarga progresiva e interrupción",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Armas · Cambiar no duplica munición ni evita bombeo",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Cuchillo · Tres trayectorias y un impacto por ataque",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Daño · Zonas y caída por distancia",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Asistencia · Requiere mirada manual, visibilidad y alcance",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "HUD · Distribuciones independientes, guardar y cancelar",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "HUD · Límites seguros, tamaño mínimo y opacidad cero",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Mapa · Refinamiento conserva cada colisión original",
+        "passed": true,
+        "detail": "139 sólidos originales"
+      },
+      {
+        "name": "Escena V2 · Geometría finita, armas diferenciadas y doce blancos",
+        "passed": true,
+        "detail": "68 mallas; 5946 triángulos, incluidos modelos inactivos y efectos reservados"
+      },
+      {
+        "name": "Cuchillo · Agarre inverso visible en formato ancho",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "ADS · Dos miras sobre el eje a distintos FOV y proporciones",
+        "passed": true,
+        "detail": "18 combinaciones; error NDC máximo 0.00e+0"
+      },
+      {
+        "name": "Disparos · Hitzones reales y eliminación del blanco",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Disparos · Pared impide impactos y asistencia",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Escopeta · Cono genera rayos distintos y daño cercano",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Cuchillo · Alcance, ángulo, pared y eliminación",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Marcador · Primera pared y alternativa en suelo",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Movimiento · Armas y animación no escriben posición ni velocidad",
+        "passed": true,
+        "detail": "720 pasos con sprint, slide jump, cambios y disparos; máximo 14.06 m/s"
+      }
+    ]
+  },
+  "renderFPS": null,
+  "renderMS": null,
+  "drawCalls": null,
+  "GPUBytes": null,
+  "HUDChrome": {
+    "passed": 16,
+    "total": 16,
+    "method": "Eventos sintéticos sobre DOM y manejadores reales; ejecutado en Chrome de escritorio, sin render 3D ni emulación de teléfono",
+    "results": [
+      {
+        "name": "HUD · Abrir muestra controles reales y oculta menús",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "HUD · Selección no dispara, salta ni mueve cámara",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "HUD · Arrastre directo y límite seguro",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "HUD · Escala centro estable, área táctil y opacidad cero",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "HUD · Segundo dedo no secuestra un arrastre",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "HUD · Vista previa mantiene el bloqueo de entradas",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "HUD · Posición, velocidad y perspectiva congeladas",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "HUD · Guardar aplica sin reinicio y persiste",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "HUD · Cancelar restaura la distribución guardada",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "HUD · Restaurar distribución y cancelar restauración",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "HUD · Perfiles separados y sin crecimiento DOM al reabrir",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Multitouch · Mover, mirar, disparar y saltar",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Multitouch · Control con opacidad cero sigue funcionando",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Multitouch · Arrastrar disparo y cancelar un dedo",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Controles · Sensibilidades separadas e inversión",
+        "passed": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Pausa · Libera controles retenidos",
+        "passed": true,
+        "detail": "OK"
+      }
+    ],
+    "measurements": {
+      "minimapMeanCPUms": 0.005500000000029104,
+      "canvasUpdates": 200,
+      "approxJSHeapBytes": 6807232
+    }
+  },
+  "sceneChrome": {
+    "passed": 46,
+    "total": 46,
+    "note": "24 físicas + 22 V2; ejecutadas también en Chrome con el atlas Canvas de señalética"
+  }
+}
