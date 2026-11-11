@@ -41,8 +41,12 @@ export class V2World extends WorldView{
    this.rig.position.lerp(m.ads.position,this.aim);this.rig.quaternion.slerp(m.ads.rotation,this.aim);this.rig.position.z+=this.recoil*.025*this.aim;
   }
   const switchDrop=a?clamp((a.switchUntil-a.time)/.24,0,1):0;this.rig.position.y-=Math.sin(switchDrop*Math.PI/2)*.22;
-  if(selected===1){const q=a?.reload?a.reloadProgress:0;m.mag.position.y=-.13-Math.sin(q*Math.PI)*.22;m.mag.rotation.z=-Math.sin(q*Math.PI)*.13;if(q){this.rig.rotation.z-=Math.sin(q*Math.PI)*.26;this.arms[1].position.y=-Math.sin(q*Math.PI)*.15;}else this.arms[1].position.y=0;}
-  if(selected===2){const elapsed=a?a.time-a.lastShot:100,pump=elapsed>.15&&elapsed<.66?Math.sin((elapsed-.15)/.51*Math.PI):0;m.pump.position.z=-.47+pump*.13;this.arms[1].position.z=pump*.13;
+  // Clear per-weapon hand offsets before layering the current action.
+  this.arms[1].position.y=0;this.arms[1].rotation.x=0;
+  if(selected===1){const q=a?.reload?a.reloadProgress:0;
+   if(a?.reload){this.rig.position.y+=this.poseSprint*.055;this.rig.rotation.x+=this.poseSprint*.17;this.rig.rotation.y-=this.poseSprint*.28;this.rig.rotation.z-=this.poseSprint*.29;}
+   m.mag.position.y=-.13-Math.sin(q*Math.PI)*.22;m.mag.rotation.z=-Math.sin(q*Math.PI)*.13;if(q){this.rig.rotation.z-=Math.sin(q*Math.PI)*.26;this.arms[1].position.y=-Math.sin(q*Math.PI)*.15;}else this.arms[1].position.y=0;}
+  if(selected===2){const elapsed=a?a.time-a.lastShot:100,duration=a?.shotgunMode==='tactical'?.27:.51,start=a?.shotgunMode==='tactical'?.10:.15,pump=elapsed>start&&elapsed<start+duration?Math.sin((elapsed-start)/duration*Math.PI):0;m.pump.position.z=-.47+pump*.13;this.arms[1].position.z=pump*.13;
    const q=a?.reload?a.reloadProgress:0;m.shell.visible=!!a?.reload;m.shell.position.y=-.21+q*.12;this.arms[1].rotation.x=-Math.sin(q*Math.PI)*.3;this.rig.rotation.z-=Math.sin(q*Math.PI)*.13;
   }else this.arms[1].position.z=0;
   if(selected===0){const attack=a?.attack,t=attack?clamp((a.time-attack.start)/attack.duration,0,1):0,pose=attack?knifePose(attack.combo,t):[0,0,0];

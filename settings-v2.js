@@ -4,6 +4,8 @@ export const preferenceSliders=[
  ['mouseX','Mouse · Horizontal',.2,3,.05,'×','look'],['mouseY','Mouse · Vertical',.2,3,.05,'×','look'],['mouseADS','Mouse · ADS',.15,1.5,.05,'×','look'],
  ['touchX','Táctil · Horizontal',.2,3,.05,'×','look'],['touchY','Táctil · Vertical',.2,3,.05,'×','look'],['touchADS','Táctil · ADS',.15,1.5,.05,'×','look'],
  ['assistStrength','Asistencia · Intensidad',0,.7,.05,'×','assist'],['assistRadius','Asistencia · Radio angular',1,9,.5,'°','assist'],['assistSlowdown','Asistencia · Reducción sensibilidad',0,.5,.02,'×','assist'],['assistRange','Asistencia · Alcance',5,50,1,'m','assist'],
+ ['reticleDiameter','Diámetro del círculo',4,80,1,'px','reticle'],
+ ['volumeEffects','Efectos',0,1,.05,'×','audio'],['volumeWeapons','Armas',0,1,.05,'×','audio'],['volumeSteps','Pasos',0,1,.05,'×','audio'],['volumeAmbient','Ambiente',0,1,.05,'×','audio'],['volumeInterface','Interfaz',0,1,.05,'×','audio'],
  ['reticleWidth','Grosor',.5,3,.25,'px','reticle'],['reticleLength','Longitud',1,12,.5,'px','reticle'],['reticleGap','Separación',0,12,.5,'px','reticle'],['reticleSize','Tamaño',.55,1.6,.05,'×','reticle'],['reticleOpacity','Opacidad',0,1,.05,'×','reticle']
 ];
 export function setupV2Settings(p,onChange=()=>{}){
