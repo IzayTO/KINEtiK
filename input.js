@@ -17,7 +17,7 @@ export class Input {
       if(e.code==='KeyP'||e.code==='Tab'){e.preventDefault();onPause(true);return;}
       if(!this.active)return;
       if(e.code==='Home'&&!e.repeat)onReset();
-      const action={KeyX:'rc',KeyG:'equip-grenade',KeyT:'equip-molotov',KeyN:'equip-gas',KeyV:'antidote',KeyR:'reload',KeyQ:'ping',KeyB:'mode',KeyH:'assist',KeyF:'autofire',Digit4:'bandage',Digit5:'mini',Digit1:'slot0',Digit2:'slot1',Digit3:'slot2'}[e.code];if(action&&!e.repeat)this.actions.push(action);
+      const action={KeyX:'rc',KeyU:'equip-rocket',KeyG:'equip-grenade',KeyT:'equip-molotov',KeyN:'equip-gas',KeyV:'antidote',KeyR:'reload',KeyQ:'ping',KeyB:'mode',KeyH:'assist',KeyF:'autofire',Digit4:'bandage',Digit5:'mini',Digit1:'slot0',Digit2:'slot1',Digit3:'slot2'}[e.code];if(action&&!e.repeat)this.actions.push(action);
       if(e.code==='Space'&&!e.repeat)this.jumpQueued=true;
       if(['KeyC','ControlLeft','ControlRight'].includes(e.code)&&!e.repeat)this.slideQueued=true;
       this.keys.add(e.code);
@@ -51,7 +51,7 @@ export class Input {
         button.classList.add('pressed');
         if(action.startsWith('equip-')||['rc','antidote','reload','ping','assist','mode','autofire','bandage','mini','slot0','slot1','slot2'].includes(action))this.actions.push(action);
         if(action==='jump'){this.jumpQueued=true;this.crouchToggle=false;}
-        if(action==='slide'){this.slideQueued=this.params.contextualSlide&&(this.speed||0)>=5.4;if(!this.params.contextualSlide || (this.speed||0)<5.4)this.crouchToggle=!this.crouchToggle;else this.crouchToggle=false;}
+        if(action==='slide'){this.slideQueued=!!this.airborne||this.params.contextualSlide&&(this.speed||0)>=5.4;if(!this.airborne&&(!this.params.contextualSlide || (this.speed||0)<5.4))this.crouchToggle=!this.crouchToggle;else this.crouchToggle=false;}
         if(action==='sprint'){this.sprintToggle=!this.sprintToggle;this.crouchToggle=false;button.classList.toggle('selected',this.sprintToggle);}
         if(action==='aim'){this.aimToggle=!this.aimToggle;button.classList.toggle('selected',this.aim||this.aimToggle);}
         if(action==='fire'){this.beginFire();this.firePointers.add(e.pointerId);this.fireOrigins??=new Map();this.fireOrigins.set(e.pointerId,{x:e.clientX,y:e.clientY});}

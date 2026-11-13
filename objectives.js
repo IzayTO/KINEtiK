@@ -6,8 +6,8 @@ export class Objectives{
  constructor(match){this.match=match;this.flags=[];this.zones=[];this.reset();}
  get active(){return this.match.config.mode==='ctf'||this.match.config.mode==='domination';}
  reset(){const m=this.match;const node=(x,z)=>{const n=m.nav.nearest({x,y:0,z});return{x:n.x,y:n.y,z:n.z};};
- this.flags=['blue','red'].map((team,i)=>{const home=node(i?0:-3,i?-36:37);return{team,home,...home,state:'home',carrier:null,returnAt:0};});
- this.zones=[[-7,30],[-29,7],[40,5],[11,-32]].map(([x,z],i)=>({id:'ABCD'[i],...node(x,z),radius:3.8,owner:null,progress:0,capturing:null,occupant:null,contested:false,counts:{blue:0,red:0}}));this.scoreClock=0;for(const a of m.actors)a.carrying=null;
+ this.flags=['blue','red'].map((team,i)=>{const base=m.level?.bases?.[team]||(i?[0,-36]:[-3,37]),home=node(...base);return{team,home,...home,state:'home',carrier:null,returnAt:0};});
+ this.zones=(m.level?.objectiveZones||[[-7,30],[-29,7],[40,5],[11,-32]]).map(([x,z],i)=>({id:'ABCD'[i],...node(x,z),radius:3.8,owner:null,progress:0,capturing:null,occupant:null,contested:false,counts:{blue:0,red:0}}));this.scoreClock=0;for(const a of m.actors)a.carrying=null;
  }
  home(flag){Object.assign(flag,flag.home,{state:'home',carrier:null,returnAt:0});}
  onDeath(a){if(!a.carrying)return;const flag=this.flags.find(f=>f.team===a.carrying);if(flag){const n=this.match.nav.nearest(a.body);Object.assign(flag,{x:n.x,y:n.y,z:n.z,state:'dropped',carrier:null,returnAt:this.match.time+25});this.match.events.push({type:'flag-dropped',actor:a.id,team:a.team,flagTeam:flag.team,position:{x:flag.x,y:flag.y,z:flag.z}});}a.carrying=null;}

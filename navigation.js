@@ -18,7 +18,8 @@ export function obstruction(solids,a,b){
 export class Navigation{
  constructor(world,spacing=1.5){
   this.world=world;this.spacing=spacing;this.nodes=[];this.cells=new Map();this.searches=0;this.links=0;
-  for(let ix=-31;ix<=31;ix++)for(let iz=-31;iz<=31;iz++){
+  const bounds=world.level?.bounds||{minX:-46.5,maxX:46.5,minZ:-46.5,maxZ:46.5};
+  for(let ix=Math.ceil(bounds.minX/spacing);ix<=Math.floor(bounds.maxX/spacing);ix++)for(let iz=Math.ceil(bounds.minZ/spacing);iz<=Math.floor(bounds.maxZ/spacing);iz++){
    const x=ix*spacing,z=iz*spacing,ys=[];
    for(const c of world.query(x,z,.01)){const contact=circleContact(c,x,z,.001);if(!contact?.inside)continue;const y=surfaceY(c,x,z);if(y<-.01||y>6.41||ys.some(v=>Math.abs(v-y)<.08))continue;
     if(world.clear(x,y+.31,z,BODY.crouch-.31,.31))ys.push(y);
@@ -29,7 +30,7 @@ export class Navigation{
    if(Math.abs(n.y-b.y)>1.25)continue;const low=this.walkable(n,b);if(low>=0)n.edges.push({to:b.id,cost:distance(n,b)*(low?1.3:1),kind:low?'crouch':'walk'});
   }
   // Authored, directional transfer: upper east terrace to the lower landing.
-  this.addLink({x:23,y:3.2,z:3},{x:18,y:2.4,z:3},'jump');
+  for(const link of world.level?.navLinks??[{a:{x:23,y:3.2,z:3},b:{x:18,y:2.4,z:3},kind:'jump'}])this.addLink(link.a,link.b,link.kind);
   this.components();this.g=new Float64Array(this.nodes.length);this.parent=new Int32Array(this.nodes.length);this.closed=new Uint8Array(this.nodes.length);
   this.cover=this.nodes.filter(n=>!n.low&&n.edges.length>=3&&this.nearCover(n));
  }

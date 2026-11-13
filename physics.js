@@ -5,7 +5,7 @@
 export const DEFAULTS = Object.freeze({
   walkSpeed:4.2, runSpeed:7.4, sprintSpeed:11.5, acceleration:46, friction:8,
   jumpSpeed:8.6, gravity:24, slideBoost:2.6, slideDuration:1.25, slideDrag:4.2,
-  airControl:0.34, sensitivity:1, hFov:100, cameraMotion:0.65, recoil:0.65,
+  airControl:0.34, sensitivity:1, hFov:100,adsFov:76, cameraMotion:0.65, recoil:0.65,
   resolution:1, autoResolution:true, autoSprint:false, contextualSlide:true, sound:true
 });
 export const BODY = Object.freeze({radius:0.31, stand:1.82, crouch:1.02, slide:0.76, step:0.32});
@@ -93,7 +93,7 @@ export class Player {
   reset(spawn=this.spawn){
     this.x=spawn.x;this.y=spawn.y;this.z=spawn.z;this.vx=0;this.vy=0;this.vz=0;
     this.height=BODY.stand;this.grounded=true;this.state='QUIETO';
-    this.sliding=false;this.slideTime=0;this.slideCooldown=0;this.coyote=0.1;
+    this.airSlide=false;this.sliding=false;this.slideTime=0;this.slideCooldown=0;this.coyote=0.1;
     this.jumpBuffer=0;this.time=0;this.landImpact=0;this.jumpEvent=false;this.landEvent=false;
     this.ground=null;this.groundTime=0.2;this.blockedStand=false;this.distance=0;
     this.previous={x:this.x,y:this.y,z:this.z};
@@ -116,12 +116,12 @@ export class Player {
     this.jumpEvent=false;this.landEvent=false;this.landImpact=0;
     this.time+=dt;this.slideCooldown=Math.max(0,this.slideCooldown-dt);
     if(input.jump)this.requestJump();
-    if(input.slide)this.trySlide();
+    if(input.slide){if(!this.grounded&&this.slideCooldown<=0&&!this.airSlide){this.airSlide=true;this.coyote=0;this.jumpBuffer=0;this.sliding=false;this.vy=Math.min(this.vy,-Math.min(13,6+this.speed*.4));}else if(this.grounded)this.trySlide();}
     this.jumpBuffer=Math.max(0,this.jumpBuffer-dt);
     this.coyote=this.grounded?0.105:Math.max(0,this.coyote-dt);
     this.groundTime=this.grounded?this.groundTime+dt:0;
     if(this.sliding){this.slideTime+=dt;if(this.slideTime>=this.params.slideDuration || this.speed<2.2)this.sliding=false;}
-    const wantedHeight=this.sliding?BODY.slide:(input.crouch?BODY.crouch:BODY.stand);
+    const wantedHeight=this.sliding||this.airSlide?BODY.slide:(input.crouch?BODY.crouch:BODY.stand);
     this.blockedStand=false;
     if(wantedHeight<this.height)this.height=wantedHeight;
     else if(wantedHeight>this.height){
@@ -180,7 +180,7 @@ export class Player {
     this.vy-=p.gravity*dt;
     const parts=Math.max(1,Math.ceil(Math.max(this.speed,Math.abs(this.vy))*dt/0.12));
     for(let i=0;i<parts;i++)this.move(dt/parts);
-    if(!groundedBefore && this.grounded){this.landEvent=true;this.groundTime=0;}
+    if(!groundedBefore && this.grounded){this.landEvent=true;this.groundTime=0;if(this.airSlide){this.airSlide=false;this.groundTime=.04;this.trySlide();}}
     this.distance+=Math.hypot(this.x-this.previous.x,this.z-this.previous.z);
     if(this.y< -15 || !Number.isFinite(this.x+this.y+this.z))this.reset();
     this.state=this.sliding?'DESLIZANDO':!this.grounded?(this.vy>0?'SALTANDO':'CAYENDO'):

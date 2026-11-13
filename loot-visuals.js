@@ -1,8 +1,9 @@
 import * as T from './three.module.min.js';
 import {clamp} from './physics.js';
-const kinds=['rifle','shotgun','bandage','mini'];
+import {itemModel,modelThumbnail} from './field-models.js';
+const kinds=['rifle','shotgun','bandage','mini','rocket'];
 // Four tiny generated icons, shaded like miniature objects; no downloaded textures.
-function texture(kind){if(typeof document==='undefined')return null;const canvas=document.createElement('canvas');canvas.width=canvas.height=96;const c=canvas.getContext('2d');if(!c)return null;
+function texture(kind){if(kind==='rocket'&&typeof document!=='undefined'){const tex=new T.Texture(),image=new Image();image.onload=()=>{tex.image=image;tex.needsUpdate=true;};image.src=modelThumbnail(itemModel('rocket'));tex.colorSpace=T.SRGBColorSpace;return tex;}if(typeof document==='undefined')return null;const canvas=document.createElement('canvas');canvas.width=canvas.height=96;const c=canvas.getContext('2d');if(!c)return null;
  const poly=(points,color)=>{c.fillStyle=color;c.beginPath();points.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));c.closePath();c.fill();};
  c.fillStyle='#132e3333';c.beginPath();c.ellipse(48,81,30,7,0,0,Math.PI*2);c.fill();
  if(kind==='rifle'||kind==='shotgun'){const shell=kind==='shotgun';poly([[22,39],[62,26],[76,38],[37,52]],shell?'#d7ae83':'#c8d4ab');poly([[22,39],[37,52],[37,77],[22,64]],shell?'#87574f':'#45685c');poly([[37,52],[76,38],[76,64],[37,77]],shell?'#b65e50':'#719481');for(let i=0;i<3;i++){const x=32+i*12,y=32-i*3;poly([[x,y],[x+7,y-3],[x+7,y-16],[x+3,y-21],[x,y-16]],'#e5c988');poly([[x+5,y-3],[x+7,y-3],[x+7,y-16],[x+5,y-19]],'#a98b53');}}
@@ -12,7 +13,7 @@ function texture(kind){if(typeof document==='undefined')return null;const canvas
 }
 export class LootVisuals{
  constructor(scene,drops){this.drops=drops;this.meshes=[];this.obj=new T.Object3D();const geometry=new T.PlaneGeometry(1,1);for(const kind of kinds){const map=texture(kind),mesh=new T.InstancedMesh(geometry,new T.MeshBasicMaterial({map,color:map?0xffffff:0x8cdcc6,transparent:true,alphaTest:.02,depthWrite:false,fog:true}),drops.filter(d=>d.kind===kind).length);mesh.frustumCulled=false;mesh.count=0;scene.add(mesh);this.meshes.push(mesh);}this.geometry=geometry;}
- update(camera,time){for(let k=0;k<4;k++){const mesh=this.meshes[k];let i=0;for(const d of this.drops){if(d.kind!==kinds[k])continue;const fly=d.collector&&time-d.flyStart>=0&&time-d.flyStart<.32;if(!d.active&&!fly)continue;const o=this.obj;o.quaternion.copy(camera.quaternion);let x=d.x,y=d.y+Math.sin((time-d.born)*2+d.id)*.055,z=d.z,scale=.65;
+ update(camera,time){for(let k=0;k<kinds.length;k++){const mesh=this.meshes[k];let i=0;for(const d of this.drops){if(d.kind!==kinds[k])continue;const fly=d.collector&&time-d.flyStart>=0&&time-d.flyStart<.32;if(!d.active&&!fly)continue;const o=this.obj;o.quaternion.copy(camera.quaternion);let x=d.x,y=d.y+Math.sin((time-d.born)*2+d.id)*.055,z=d.z,scale=d.kind==='rocket'?1.05:.65;
   if(fly){const t=clamp((time-d.flyStart)/.32,0,1),q=t*t*(3-2*t),a=d.collector.body;x+=(a.x-x)*q;y+=(a.y+Math.min(1.15,a.height*.65)-y)*q;z+=(a.z-z)*q;scale*=1-q*.88;}
   o.position.set(x,y,z);o.scale.setScalar(scale);o.updateMatrix();mesh.setMatrixAt(i++,o.matrix);
  }mesh.count=i;if(i)mesh.instanceMatrix.needsUpdate=true;}}

@@ -43,8 +43,8 @@ function coloredMesh(root,material){
   const mesh=new THREE.Mesh(g,material);root.add(mesh);return mesh;
 }
 export class WorldView {
-  constructor(canvas,level,params,{render=true}={}){
-    this.params=params;this.level=level;this.renderer=render?new THREE.WebGLRenderer({canvas,antialias:false,alpha:false,powerPreference:'high-performance'}):null;
+  constructor(canvas,level,params,{render=true,renderer=null}={}){
+    this.params=params;this.level=level;this.renderer=renderer||(render?new THREE.WebGLRenderer({canvas,antialias:false,alpha:false,powerPreference:'high-performance'}):null);
     if(this.renderer){
       this.renderer.setClearColor(0xc4d2d0);this.renderer.outputColorSpace=THREE.SRGBColorSpace;
       this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.05;
@@ -74,12 +74,13 @@ export class WorldView {
         boxes.forEach((v,i)=>{temp.position.set(v.x,v.y,v.z);temp.rotation.set(0,-v.angle,0);temp.scale.set(v.w,v.h,v.d);temp.updateMatrix();matrix.copy(temp.matrix);mesh.setMatrixAt(i,matrix);});
         mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();this.scene.add(mesh);this.shootables.push(mesh);
       }
+      const custom=this.level.visuals.filter(v=>v.type==='mesh'&&v.mat===name);if(custom.length){const positions=custom.flatMap(v=>v.positions),g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));g.computeVertexNormals();g.computeBoundingSphere();const m=new THREE.Mesh(g,this.materials[name]);this.scene.add(m);this.shootables.push(m);}
       const prisms=this.level.visuals.filter(v=>v.type==='prism'&&v.mat===name);
       if(prisms.length){const mesh=new THREE.Mesh(mergeGeometry(prisms.map(prismGeometry)),this.materials[name]);this.scene.add(mesh);this.shootables.push(mesh);}
     }
     // Soft, static contact patches are plain low-cost geometry, not shadow maps.
     const shade=new THREE.MeshBasicMaterial({color:0x24383b,transparent:true,opacity:0.13,depthWrite:false});
-    for(const [x,z,w,d]of [[-30,-1,23,36],[4,-33,36,18],[-3.5,-8,21,6],[-2,15.7,9,3.4],[28,20,16,5.6]]){
+    for(const [x,z,w,d]of this.level.shadows??[[-30,-1,23,36],[4,-33,36,18],[-3.5,-8,21,6],[-2,15.7,9,3.4],[28,20,16,5.6]]){
       const m=new THREE.Mesh(new THREE.PlaneGeometry(w,d),shade);m.rotation.x=-Math.PI/2;m.position.set(x,0.021,z);this.scene.add(m);
     }
   }
@@ -200,7 +201,7 @@ export class WorldView {
     this.roll=damp(this.roll,(-(input.x||0)*0.009+Math.sin(this.phase)*0.003*this.bob)*motion,14,dt);
     this.camera.position.set(p.previous.x+(p.x-p.previous.x)*alpha,p.previous.y+(p.y-p.previous.y)*alpha+this.eye+bobY-this.landing*motion,p.previous.z+(p.z-p.previous.z)*alpha);
     this.camera.rotation.order='YXZ';this.camera.rotation.set(input.pitch||0,input.yaw||0,this.roll);
-    const fov=damp(this.hFov,this.params.hFov-(this.params.hFov-76)*this.aim,18,dt);
+    const fov=damp(this.hFov,this.params.hFov-(this.params.hFov-Math.min(this.params.hFov,this.params.adsFov??76))*this.aim,18,dt);
     if(Math.abs(fov-this.hFov)>0.005){this.hFov=fov;this.camera.fov=horizontalToVertical(fov,this.width/this.height);this.camera.updateProjectionMatrix();}
     this.lookSwayX=damp(this.lookSwayX,clamp(input.lookDX||0,-25,25)*0.0005,13,dt);
     this.lookSwayY=damp(this.lookSwayY,clamp(input.lookDY||0,-25,25)*0.0005,13,dt);

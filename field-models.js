@@ -1,6 +1,7 @@
 import * as T from './three.module.min.js';
+import {rocketGeometry} from './rocket-model.js';
 const cache=new Map(),material=new T.MeshLambertMaterial({vertexColors:true,flatShading:true});
-export function itemGeometry(kind){if(cache.has(kind))return cache.get(kind);const positions=[],colors=[],matrix=new T.Matrix4();
+export function itemGeometry(kind){if(kind==='rocket'||kind==='rocket-projectile')return rocketGeometry(kind==='rocket-projectile');if(cache.has(kind))return cache.get(kind);const positions=[],colors=[],matrix=new T.Matrix4();
  const add=(g,color,x,y,z,sx=1,sy=1,sz=1,rz=0)=>{const geom=g.index?g.toNonIndexed():g;matrix.compose(new T.Vector3(x,y,z),new T.Quaternion().setFromAxisAngle(new T.Vector3(0,0,1),rz),new T.Vector3(sx,sy,sz));geom.applyMatrix4(matrix);positions.push(...geom.attributes.position.array);const c=new T.Color(color);for(let i=0;i<geom.attributes.position.count;i++)colors.push(c.r,c.g,c.b);geom.dispose();if(g!==geom)g.dispose();};
  const box=(color,x,y,z,w,h,d)=>add(new T.BoxGeometry(w,h,d),color,x,y,z);
  const tube=(color,x,y,z,rt,rb,h)=>add(new T.CylinderGeometry(rt,rb,h,8),color,x,y,z);

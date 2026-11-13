@@ -46,8 +46,8 @@ export class CombatUI{
   this.view.camera.updateMatrixWorld(true);
   const state=vignetteState(a,time),showFX=!$('hud').hidden&&!editing;$('damage-feedback').style.opacity=showFX?String(state.damage):'0';$('heal-feedback').style.opacity=showFX?String(state.healing):'0';$('heal-feedback').classList.toggle('mini',state.color==='blue');this.updateDeath(time,editing);
   // This entire overlay uses a bounded pool. Projection never waits for the slow numerical HUD.
-  for(let i=0;i<this.arrows.length;i++){const el=this.arrows[i],b=m.bots[i];let visible=enabled&&b?.alive&&m.config.mode!=='ffa'&&!m.enemy(a,b);if(visible)visible=this.project(b.body.previous.x+(b.body.x-b.body.previous.x)*(this.view.visualAlpha??1),b.body.y+b.body.height+.25,b.body.previous.z+(b.body.z-b.body.previous.z)*(this.view.visualAlpha??1));el.hidden=!visible;
-   if(visible){const d=Math.hypot(b.body.x-a.body.x,b.body.z-a.body.z),scale=clamp(1.2-d*.012,.48,1.2);el.style.transform=`translate(${(this.vector.x*.5+.5)*innerWidth}px,${(-this.vector.y*.5+.5)*innerHeight}px) translate(-50%,-100%) scale(${scale})`;}
+  for(let i=0;i<this.arrows.length;i++){const el=this.arrows[i],b=m.bots[i];let visible=(!document.getElementById('hud').hidden&&!editing&&a.alive)&&(!m.remote.engaged||m.remote.ready)&&b?.alive&&m.config.mode!=='ffa'&&!m.enemy(a,b);if(visible)visible=this.project(b.body.previous.x+(b.body.x-b.body.previous.x)*(this.view.visualAlpha??1),b.body.y+b.body.height+.25,b.body.previous.z+(b.body.z-b.body.previous.z)*(this.view.visualAlpha??1));el.hidden=!visible;
+   if(visible){const observer=m.remote.engaged?m.remote.body:a.body,d=Math.hypot(b.body.x-observer.x,b.body.z-observer.z),scale=clamp(1.2-d*.012,.48,1.2);el.style.transform=`translate(${(this.vector.x*.5+.5)*innerWidth}px,${(-this.vector.y*.5+.5)*innerHeight}px) translate(-50%,-100%) scale(${scale})`;}
   }
   if(time>=this.nextCrate||this.crateId===null){this.nextCrate=time+.08;const c=m.supplies.nearest(a);this.crateId=c?.id??null;}
   let crate=m.crates[a.opening?.id??this.heldCrate??this.crateId],show=enabled&&crate?.available&&m.supplies.reachable(a,crate);

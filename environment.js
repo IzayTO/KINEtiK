@@ -64,11 +64,11 @@ export class NightEnvironment{
  constructor(view){this.view=view;this.night=false;this.nightMesh=null;this.timer=0;this.pool=[];
   this.daySky=view.sky.geometry.attributes.color.array.slice();this.dayFog=view.scene.fog.color.clone();this.dayBodies=[...view.sky.children];
   this.savedLights=[...view.scene.children,...view.gunScene.children].filter(o=>o.isLight).map(light=>({light,color:light.color.clone(),ground:light.groundColor?.clone(),intensity:light.intensity}));
-  this.buildFixtures();this.buildNightSky();
+  this.lamps=view.level.lamps||LAMPS;this.buildFixtures();this.buildNightSky();
  }
  buildFixtures(){const scene=this.view.scene,geo=new T.BoxGeometry(1,1,1),shell=new T.MeshLambertMaterial({color:0x304341});this.emitMaterial=new T.MeshBasicMaterial({color:0x69736b});
-  const housing=new T.InstancedMesh(geo,shell,LAMPS.length),emitters=new T.InstancedMesh(geo,this.emitMaterial,LAMPS.length),temp=new T.Object3D();
-  LAMPS.forEach((l,i)=>{temp.position.set(l.x,l.y,l.z);temp.rotation.set(0,Math.atan2(l.n[0],l.n[2]),0);temp.scale.set(1.05,l.wall?.30:.07,l.wall?.16:.30);temp.updateMatrix();housing.setMatrixAt(i,temp.matrix);
+  const housing=new T.InstancedMesh(geo,shell,this.lamps.length),emitters=new T.InstancedMesh(geo,this.emitMaterial,this.lamps.length),temp=new T.Object3D();
+  this.lamps.forEach((l,i)=>{temp.position.set(l.x,l.y,l.z);temp.rotation.set(0,Math.atan2(l.n[0],l.n[2]),0);temp.scale.set(1.05,l.wall?.30:.07,l.wall?.16:.30);temp.updateMatrix();housing.setMatrixAt(i,temp.matrix);
    temp.position.add(new T.Vector3(...l.n).multiplyScalar(l.wall?.09:.04));temp.scale.set(.87,l.wall?.19:.015,l.wall?.025:.21);temp.updateMatrix();emitters.setMatrixAt(i,temp.matrix);});
   housing.computeBoundingSphere();emitters.computeBoundingSphere();scene.add(housing,emitters);
   // Only two nearby warm lights shade moving bodies/loot. Architecture is baked.
@@ -89,10 +89,10 @@ export class NightEnvironment{
   this.moon=new T.Mesh(geo,new T.MeshBasicMaterial({color:0xf2edce,side:T.DoubleSide,transparent:true,depthWrite:false,fog:false}));this.moon.position.copy(moonDir).multiplyScalar(130);this.moon.lookAt(0,0,0);this.moon.rotateZ(-.20);this.moon.renderOrder=-7;this.starsAndMoon.add(this.moon);
  }
  setMode(mode){const night=mode==='night';if(night===this.night)return;this.night=night;const v=this.view;
-  if(night&&!this.nightMesh){const geo=bakeNightGeometry(v.architecture,v.level.solids);this.nightMesh=new T.Mesh(geo,new T.MeshBasicMaterial({vertexColors:true}));v.scene.add(this.nightMesh);}
+  if(night&&!this.nightMesh){const geo=bakeNightGeometry(v.architecture,v.level.solids,this.lamps);this.nightMesh=new T.Mesh(geo,new T.MeshBasicMaterial({vertexColors:true}));v.scene.add(this.nightMesh);}
   for(const mesh of v.architecture)mesh.visible=!night;if(this.nightMesh)this.nightMesh.visible=night;
   const attribute=v.sky.geometry.attributes.color,pos=v.sky.geometry.attributes.position;
-  if(night){const horizon=new T.Color(0x29394e),top=new T.Color(0x060e21),color=new T.Color();for(let i=0;i<pos.count;i++){color.copy(horizon).lerp(top,Math.pow(clamp(pos.getY(i)/145,0,1),.55));attribute.setXYZ(i,color.r,color.g,color.b);}v.scene.fog.color.copy(horizon);}
+  if(night){const horizon=new T.Color(0x171e2a),top=new T.Color(0x02050c),color=new T.Color();for(let i=0;i<pos.count;i++){color.copy(horizon).lerp(top,Math.pow(clamp(pos.getY(i)/145,0,1),.55));attribute.setXYZ(i,color.r,color.g,color.b);}v.scene.fog.color.copy(horizon);}
   else{attribute.array.set(this.daySky);v.scene.fog.color.copy(this.dayFog);}attribute.needsUpdate=true;v.renderer?.setClearColor(v.scene.fog.color);
   this.dayBodies.forEach(o=>o.visible=!night);this.starsAndMoon.visible=night;this.emitMaterial.color.set(night?0xffd394:0x69736b);
   for(const item of this.savedLights){const {light}=item;light.color.copy(night?new T.Color(0xffdeb1):item.color);if(light.groundColor)light.groundColor.copy(night?new T.Color(0x4a4541):item.ground);light.intensity=night?(light.isHemisphereLight?1.2:.65):item.intensity;}
@@ -100,10 +100,10 @@ export class NightEnvironment{
  }
  update(dt,player){if(!this.night)return;this.timer-=dt;
   if(this.timer<=0){this.timer=.25;let first=-1,second=-1,d1=Infinity,d2=Infinity;
-   for(let i=0;i<LAMPS.length;i++){const l=LAMPS[i],d=Math.hypot(player.x-l.x,player.y+1-l.y,player.z-l.z);if(d<d1){d2=d1;second=first;d1=d;first=i;}else if(d<d2){d2=d;second=i;}}
+   for(let i=0;i<this.lamps.length;i++){const l=this.lamps[i],d=Math.hypot(player.x-l.x,player.y+1-l.y,player.z-l.z);if(d<d1){d2=d1;second=first;d1=d;first=i;}else if(d<d2){d2=d;second=i;}}
    const selected=[first,second];for(const slot of this.pool)if(selected.includes(slot.next))selected.splice(selected.indexOf(slot.next),1);else slot.next=-1;for(const slot of this.pool)if(slot.next<0)slot.next=selected.shift()??-1;
   }
-  for(const slot of this.pool){const light=slot.light;if(slot.index!==slot.next){light.intensity=Math.max(0,light.intensity-dt*45);if(light.intensity<.01){slot.index=slot.next;if(slot.index>=0){const l=LAMPS[slot.index];light.position.set(l.x+l.n[0]*.18,l.y+l.n[1]*.18,l.z+l.n[2]*.18);light.distance=l.r;}}}
+  for(const slot of this.pool){const light=slot.light;if(slot.index!==slot.next){light.intensity=Math.max(0,light.intensity-dt*45);if(light.intensity<.01){slot.index=slot.next;if(slot.index>=0){const l=this.lamps[slot.index];light.position.set(l.x+l.n[0]*.18,l.y+l.n[1]*.18,l.z+l.n[2]*.18);light.distance=l.r;}}}
    else if(slot.index>=0)light.intensity=Math.min(14,light.intensity+dt*35);
   }
  }
