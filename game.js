@@ -9,6 +9,9 @@ import {setupV2Settings} from './settings-v2.js';
 import {refineLevel} from './refinements.js';
 import {Input} from './input.js';
 import {AudioFX} from './audio.js';
+import {AimSupport} from './aim-support.js';
+import {CombatUI} from './combat-ui.js';
+import {FieldHUD} from './field-hud.js';
 
 const $=id=>document.getElementById(id),canvas=$('game');
 const settingsKey='kinetic-fps-settings-v1';
@@ -34,7 +37,7 @@ let fps=60,frameCount=0,frameSum=0,hudTime=0,hitTimer=0,hits=0,shots=0,playTime=
 const audio=new AudioFX(params),preferences=loadPreferences(),arsenal=new Arsenal();
 // Explicit diagnostic mode does not pretend to render a game. Normal startup always requires WebGL.
 const diagnostic=new URLSearchParams(location.search).has('qa');
-let editor,minimap,reticle,refreshV2,assistCache=null,assistTime=0,match;
+let editor,minimap,reticle,refreshV2,assistCache=null,assistTime=0,match,aimSupport,combatUI,fieldHUD;
 let matchConfig={...MATCH_DEFAULTS};try{const saved=JSON.parse(localStorage.getItem('kinetic-match-v3'));if(saved)Object.assign(matchConfig,saved);}catch{}
 audio.preferences=preferences;arsenal.autoReload=preferences.autoReload;
 const events=[],metrics={physicsMS:0,renderMS:0,hudMS:0,minimapMS:0,physicsSteps:0};
@@ -100,16 +103,37 @@ function tick(now){
     playTime+=dt;input.speed=player.speed;
     alpha=clock.advance(dt,h=>{
       const wasSlide=player.sliding,wasSpeed=player.speed,sample=input.sample(true);
+      const aimOrigin={x:player.x,y:player.y+view.eye,z:player.z};
+      [input.yaw,input.pitch]=aimSupport.track(h,aimOrigin,input.yaw,input.pitch,sample.aim&&!match.player.held&&!match.player.throwAction&&arsenal.selected!==0&&!arsenal.reload,input.touchMode||preferences.assistMouse);
+      sample.yaw=input.yaw;sample.pitch=input.pitch;
       match.player.yaw=input.yaw;match.player.pitch=input.pitch;
       if(match.player.alive)player.step(h,sample);steps++;
       for(const action of (match.player.alive?sample.actions:[])){
-        if(action.startsWith('slot')){if(arsenal.select(+action.slice(4)))audio.sound('switch');}
-        else if(action==='reload'){if(arsenal.requestReload())audio.sound('reload');}
+        if(action.startsWith('slot')){if(match.player.throwAction)continue;match.player.held=null;input.throwableMode=false;match.supplies.cancel(match.player);if(arsenal.select(+action.slice(4)))audio.sound('switch');}
+        else if(action.startsWith('equip-')){if(match.ordnance.select(match.player,action.slice(6))){input.aimToggle=false;input.aim=false;input.throwableMode=true;audio.sound('switch');}}
+        else if(action==='antidote'){if(!match.ordnance.antidote(match.player))toast('Sin intoxicación o sin antídotos');}
+        else if(action==='reload'){if(match.player.throwAction)continue;match.player.held=null;input.throwableMode=false;match.supplies.cancel(match.player);if(arsenal.requestReload())audio.sound('reload');}
+        else if(action==='bandage'||action==='mini'){if(!match.supplies.request(match.player,action))toast(match.player.consuming?'Ya estás usando un consumible':arsenal.reload?'Termina la recarga primero':'No necesitas ese consumible o no tienes unidades');}
+        else if(action==='autofire'){preferences.autoFire=!preferences.autoFire;aimSupport.fireId=null;savePreferences(preferences);toast('Autodisparo ADS '+(preferences.autoFire?'activado':'desactivado'));}
         else if(action==='mode')arsenal.toggleMode();
         else if(action==='assist'){preferences.assist=!preferences.assist;savePreferences(preferences);refreshV2();}
         else if(action==='ping')events.push({type:'ping'});
       }
-      if(match.player.alive)arsenal.step(h,sample,{speed:player.speed,grounded:player.grounded,aim:sample.aim&&arsenal.selected!==0},e=>events.push(e));
+      if(match.player.alive){
+        const manual=sample.fire||sample.fireStart;if(manual)match.supplies.cancel(match.player);
+        combatUI.step(h,sample);
+        aimOrigin.x=player.x;aimOrigin.y=player.y+view.eye;aimOrigin.z=player.z;
+        const ray={x:-Math.sin(input.yaw)*Math.cos(input.pitch),y:Math.sin(input.pitch),z:-Math.cos(input.yaw)*Math.cos(input.pitch)};
+        const automatic=!match.player.held&&!match.player.throwAction&&!manual&&!!aimSupport.autoTarget(aimOrigin,ray,sample.aim&&view.aim>.65);
+        if(automatic){sample.fire=true;if(arsenal.selected===1&&arsenal.mode==='semi'&&arsenal.time+h>=arsenal.slots[1].ready)sample.fireStart=true;}
+        const throwing=!!match.player.held||!!match.player.throwAction;
+        if(throwing&&(sample.fireStart||sample.fire&&!match.player.throwPrevious))match.ordnance.trigger(match.player,input.yaw,input.pitch);
+        match.player.throwPrevious=sample.fire;input.throwableMode=!!match.player.held;
+        if(throwing||match.player.consuming||match.player.opening){sample.fire=false;sample.fireStart=false;}
+        arsenal.step(h,sample,{busy:throwing||!!match.player.consuming||!!match.player.opening,speed:player.speed,grounded:player.grounded,aim:sample.aim&&arsenal.selected!==0},e=>{
+          if(automatic&&e.type==='shot'){const result=view.fire(e,aimOrigin,ray);shots++;registerHits(result);}else events.push(e);
+        });
+      }
       match.step(h);
       if(match.player.alive){if(player.jumpEvent){view.onJump();audio.sound('jump');}if(player.landEvent){view.onLand(player.landImpact);if(player.landImpact>4){audio.sound('land');match.hear(match.player,15,'land');}}
       if(!wasSlide&&player.sliding)audio.sound('slide');if(wasSpeed>6&&player.speed<wasSpeed-2&&player.grounded)audio.sound('brake');
@@ -124,19 +148,20 @@ function tick(now){
       if(event.type==='swing'){audio.sound('swing');continue;}
       const result=event.type==='shot'?view.fire(event):event.type==='melee'?view.melee():[];
       if(event.type==='shot'){shots++;}
-      if(result.length){hits+=result.length;hitTimer=.12;audio.sound('hit');$('hits').textContent=String(hits).padStart(2,'0');}
+      registerHits(result);
     }events.length=0;
     processMatchEvents();
-    $('damage-feedback').style.opacity=match.player.hit>0?'.8':'0';$('death-feedback').hidden=match.player.alive;if(!match.player.alive)$('death-feedback').textContent='ELIMINADO · REAPARICIÓN EN '+Math.max(0,match.player.deadUntil-match.time).toFixed(1)+' s';
+
     if(match.config.quality==='adaptive')match.qualityScale=fps<46?1.5:1;
     assistTime+=dt;if(assistTime>=.08){assistTime=0;assistCache=preferences.assist?view.assistTarget(input.yaw,input.pitch,preferences):null;}
-    reticle.update(arsenal.spread({speed:player.speed,grounded:player.grounded,aim:sampled.aim}),view.camera.fov,innerHeight);
+    reticle.update(match.player.held?0:arsenal.spread({speed:player.speed,grounded:player.grounded,aim:sampled.aim}),view.camera.fov,innerHeight,match.player.held?null:arsenal.weapon.id);
     $('reticle').classList.toggle('aim',sampled.aim);input.lookDX=0;input.lookDY=0;
     hitTimer=Math.max(0,hitTimer-dt);$('hitmarker').style.opacity=hitTimer>0?'1':'0';
     $('chain-hint').style.opacity=playTime>18?'0':'1';
   }else if(!started&&!editor?.editing){
     view.update(dt,player,{yaw:0,pitch:0.01,x:0},1);
   }
+  combatUI.frame(dt,editor.editing);fieldHUD.frame(dt,editor.editing);minimap.updateRadar(match,player,input.yaw,preferences.mapRotate,dt);
   // Project the fixed world marker on EVERY rendered frame; digits remain low-frequency.
   const projected=view.pingScreen();$('ping-readout').hidden=!projected?.visible;if(projected?.visible)$('ping-readout').style.transform=`translate(-50%,-110%) translate(${projected.x}px,${projected.y}px)`;
   // Render while paused at 30 Hz, reducing battery use without hiding the environment.
@@ -153,10 +178,10 @@ function tick(now){
     $('fire-mode').textContent=arsenal.selected===1?arsenal.mode.toUpperCase():arsenal.selected===2?(arsenal.shotgunMode==='pump'?'CORREDERA':'TÁCTICO'):'CUCHILLO';
     $('ammo-status').textContent=arsenal.reload?'RECARGANDO':arsenal.selected===0?'AGARRE INVERTIDO':'/ '+arsenal.weapon.capacity+' · RESERVA '+arsenal.reserve;
     $('reload-progress').style.width=(arsenal.reloadProgress*100)+'%';
-    document.querySelectorAll('#weapon-slots button').forEach((b,i)=>b.classList.toggle('selected',i===arsenal.selected));
+    document.querySelectorAll('#weapon-slots button').forEach(b=>b.classList.toggle('selected',!match.player.held&&+b.dataset.action.slice(4)===arsenal.selected));
     document.querySelector('.assist-button').classList.toggle('selected',preferences.assist);
     document.querySelector('.mode-button').classList.toggle('selected',arsenal.selected===1&&arsenal.mode==='semi');document.querySelector('.mode-button small').textContent=arsenal.selected===1?arsenal.mode.toUpperCase():arsenal.selected===2?(arsenal.shotgunMode==='pump'?'BOMBA':'TÁCTICO'):'FILO';
-    updateMatchHUD();
+    updateMatchHUD();fieldHUD.refresh();
     metrics.hudMS=performance.now()-hudStart;
     $('render-stats').textContent=`120 Hz · ${view.stats.calls} llamadas · ${Math.round(view.stats.triangles/1000)}k triángulos · ${Math.round(view.scale*100)}% píxel CSS · CPU física ${metrics.physicsMS.toFixed(2)} ms · envío render ${metrics.renderMS.toFixed(2)} ms · HUD ${metrics.hudMS.toFixed(2)} ms${diagnostic?' · QA SIN 3D':''}`;
   }
@@ -166,30 +191,33 @@ function tick(now){
   }
 }
 function beginSimulation(config=matchConfig){
- match.start(config);view.attachMatch(match);player.previous={x:player.x,y:player.y,z:player.z};input.yaw=match.player.yaw;input.pitch=0;input.clear();clock.reset();events.length=0;arsenal.autoReload=preferences.autoReload;view.eye=1.67;view.landing=0;playTime=0;hits=shots=0;$('hits').textContent='00';$('match-result').hidden=true;$('death-feedback').hidden=true;updateMatchHUD();
+ match.start(config);aimSupport.reset();combatUI.reset();fieldHUD.reset();view.attachMatch(match);player.previous={x:player.x,y:player.y,z:player.z};input.yaw=match.player.yaw;input.pitch=0;input.clear();clock.reset();events.length=0;arsenal.autoReload=preferences.autoReload;view.eye=1.67;view.landing=0;playTime=0;hits=shots=0;$('hits').textContent='00';$('match-result').hidden=true;$('death-feedback').hidden=true;updateMatchHUD();
 }
+function registerHits(result){if(result.length){hits+=result.length;hitTimer=.12;audio.sound('hit');$('hits').textContent=String(hits).padStart(2,'0');}}
 function processMatchEvents(){
  for(const e of match.events){
-  const local=e.actor===0,pos=local?null:e.position;
+  combatUI.onEvent(e);fieldHUD.onEvent(e);
+  const local=e.actor===0,pos=local&&!['explosion','glass','gas','fire-loop'].includes(e.type)?null:e.position;
   if(e.type==='trace'){view.showTrace(e);if(Math.hypot(e.to.x-player.x,e.to.y-player.y,e.to.z-player.z)<12)audio.sound('hit',e.to);continue;}
   if(e.type==='shot'){audio.sound(e.weapon,pos);continue;}
   if(e.type==='spawn'&&local){input.clear();input.yaw=match.player.yaw;input.pitch=0;input.active=playing;view.eye=1.67;view.landing=0;}
   if(e.type==='elimination'&&local){input.clear();input.active=false;player.jumpEvent=player.landEvent=false;}
   if(e.type==='finished'){playing=false;input.active=false;input.clear();if(document.pointerLockElement)document.exitPointerLock();$('pause').hidden=true;$('hud').hidden=true;$('touch-controls').hidden=true;showResult();continue;}
-  if(e.type==='melee')continue;audio.sound(e.type,pos);
+  if(e.type==='capture')toast((e.team==='blue'?'AZUL':'ROJO')+' · BANDERA CAPTURADA');
+  if(['damage','melee','supply-full','consume'].includes(e.type))continue;audio.sound(e.type,pos);
  }match.events.length=0;
 }
 function updateMatchHUD(){
  if(!match)return;const a=match.player;$('health-value').textContent=Math.ceil(a.health);$('shield-value').textContent=Math.ceil(a.shield);$('health-fill').style.width=a.health+'%';$('shield-fill').style.width=a.shield+'%';$('score-blue').textContent=match.config.mode==='ffa'?a.kills:match.score?.blue||0;$('score-red').textContent=match.config.mode==='ffa'?a.deaths:match.score?.red||0;
  $('score-label-blue').textContent=match.config.mode==='ffa'?'BAJAS':'AZUL';$('score-label-red').textContent=match.config.mode==='ffa'?'CAÍDAS':'ROJO';
- const left=Math.max(0,match.config.minutes*60-match.time),time=Math.floor(left/60)+':'+String(Math.floor(left%60)).padStart(2,'0');$('match-status').textContent=(match.config.mode==='training'?'ENTRENAMIENTO':match.config.mode==='ffa'?'LIBRE · '+time:'EQUIPOS · '+time)+(a.alive&&match.time<a.spawnUntil?' · PROTEGIDO':'');
+ const left=Math.max(0,match.config.minutes*60-match.time),time=match.config.minutes===0?'SIN LÍMITE':Math.floor(left/60)+':'+String(Math.floor(left%60)).padStart(2,'0');$('match-status').textContent=(match.config.mode==='training'?'ENTRENAMIENTO':match.config.mode==='ffa'?'LIBRE · '+time:(match.config.mode==='ctf'?'BANDERAS · ':match.config.mode==='domination'?'DOMINACIÓN · ':'EQUIPOS · ')+time)+(a.alive&&match.time<a.spawnUntil?' · PROTEGIDO':'');
  $('auto-reload').textContent='AUTO RECARGA: '+(preferences.autoReload?'ON':'OFF');$('auto-reload').setAttribute('aria-pressed',String(preferences.autoReload));
 }
 function openMatchMenu(){playing=false;input.active=false;input.clear();clock.reset();if(document.pointerLockElement)document.exitPointerLock();$('welcome').hidden=true;$('hud').hidden=true;$('touch-controls').hidden=true;$('pause').hidden=false;$('match-result').hidden=true;tab('match');}
-function showResult(){const r=match.result;$('result-title').textContent='GANADOR · '+r.winner;const table=document.createElement('table'),head=document.createElement('tr');for(const name of ['PARTICIPANTE','BAJAS','CAÍDAS']){const th=document.createElement('th');th.textContent=name;head.append(th);}table.append(head);for(const a of r.ranked){const row=document.createElement('tr');for(const value of [a.name,a.kills,a.deaths]){const td=document.createElement('td');td.textContent=value;row.append(td);}table.append(row);}$('result-scores').replaceChildren(table);$('match-result').hidden=false;}
+function showResult(){const r=match.result;$('result-title').textContent='GANADOR · '+r.winner;const table=document.createElement('table'),head=document.createElement('tr');for(const name of (r.mode==='ctf'?['PARTICIPANTE','BAJAS','CAÍDAS','CAPTURAS']:['PARTICIPANTE','BAJAS','CAÍDAS'])){const th=document.createElement('th');th.textContent=name;head.append(th);}table.append(head);for(const a of r.ranked){const row=document.createElement('tr');for(const value of (r.mode==='ctf'?[a.name,a.kills,a.deaths,a.captures]:[a.name,a.kills,a.deaths])){const td=document.createElement('td');td.textContent=value;if(value===a.name)td.className='name-'+a.team;row.append(td);}table.append(row);}$('result-scores').replaceChildren(table);if(['ctf','domination'].includes(r.mode)){const score=document.createElement('p');score.textContent=`AZUL ${r.score.blue} · ROJO ${r.score.red} / ${r.mode==='ctf'?'CAPTURAS':'PUNTOS'}`;$('result-scores').prepend(score);}$('match-result').hidden=false;}
 function setupMatchUI(){
- const fields=['mode','bots','difficulty','team','minutes','limit','quality','crateSeconds'];for(const key of fields){const el=$('match-'+key);el.value=String(matchConfig[key]);if(!el.value)el.value=String(MATCH_DEFAULTS[key]);}
- const refresh=()=>{const n=+$('match-bots').value;$('bot-count-label').textContent=n;$('bot-warning').textContent=n>=12?n+' bots · Mayor carga de CPU. Reduce la cantidad o usa IA adaptativa si baja la fluidez.':n+' bots · Perfiles y percepción activos.';};$('match-bots').oninput=refresh;refresh();
+ const fields=['mode','bots','difficulty','team','minutes','limit','quality','crateSeconds','environment','captureLimit','dominationLimit'];for(const key of fields){const el=$('match-'+key);el.value=String(matchConfig[key]);if(!el.value)el.value=String(MATCH_DEFAULTS[key]);}
+ const refresh=()=>{const mode=$('match-mode').value;$('capture-limit-field').hidden=mode!=='ctf';$('domination-limit-field').hidden=mode!=='domination';$('elimination-limit-field').hidden=['ctf','domination'].includes(mode);$('match-team').disabled=$('match-mode').value==='ffa';const n=+$('match-bots').value;$('bot-count-label').textContent=n;$('bot-warning').textContent=n>=12?n+' bots · Mayor carga de CPU. Reduce la cantidad o usa IA adaptativa si baja la fluidez.':n+' bots · Perfiles y percepción activos.';};$('match-bots').oninput=refresh;$('match-mode').onchange=refresh;refresh();
  const read=()=>{for(const key of fields){const val=$('match-'+key).value;matchConfig[key]=typeof MATCH_DEFAULTS[key]==='number'?+val:val;}try{localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));}catch{}return matchConfig;};
  $('configure-match').onclick=openMatchMenu;$('begin-match').onclick=()=>{beginSimulation(read());start();};$('restart-match').onclick=()=>{beginSimulation(read());start();};$('result-restart').onclick=()=>{beginSimulation();start();};$('result-menu').onclick=openMatchMenu;
  $('return-menu').onclick=()=>{playing=false;started=false;match.running=false;input.active=false;input.clear();$('pause').hidden=true;$('welcome').hidden=false;$('hud').hidden=true;$('touch-controls').hidden=true;};
@@ -198,8 +226,11 @@ function setupMatchUI(){
 try{
   level=refineLevel(createLevel());player=new Player(new CollisionWorld(level.solids),params,level.spawn);clock=new FixedClock();
   match=new Match(player.world,player,arsenal,params);view=new V3World(canvas,level,params,{render:!diagnostic});input=new Input(canvas,params,pause,reset);
+  view.preferences=preferences;aimSupport=new AimSupport(match,preferences);input.onLook=(dx,dy)=>aimSupport.manual(dx,dy);
   input.preferences=preferences;input.onAssist=(yaw,pitch,dyaw,dpitch)=>assistDelta(yaw,pitch,dyaw,dpitch,view.confirmAssist(assistCache),preferences);
   editor=new HUDEditor({touch:input.touchMode,onClose:({save,persisted})=>{input.clear();clock.reset();$('pause').hidden=false;$('touch-controls').hidden=true;$('hud').hidden=true;tab('controls');if(save)toast(persisted?'Distribución guardada':'Aplicada en esta sesión; almacenamiento no disponible');}});
+  combatUI=new CombatUI(match,view,input,preferences,()=>playing&&!editor.editing&&match.player.alive,toast);
+  fieldHUD=new FieldHUD(match,view,input);
   minimap=new Minimap($('minimap-canvas'),level);reticle=new Reticle($('reticle'),preferences);refreshV2=setupV2Settings(preferences,()=>reticle.update(0,view.camera.fov,innerHeight));
   $('customize-hud').onclick=()=>{playing=false;input.active=false;input.clear();clock.reset();$('pause').hidden=true;$('hud').hidden=false;$('touch-controls').hidden=false;editor.begin();};
   $('reset-targets').onclick=()=>{beginSimulation();toast('Partida reiniciada');};
@@ -221,11 +252,12 @@ try{
   for(const b of document.querySelectorAll('[data-tab]'))b.addEventListener('click',()=>tab(b.dataset.tab));
   lastTime=performance.now();requestAnimationFrame(tick);
   // Read-only diagnostics are useful for reproducible desktop QA and user reports.
-  window.kinetic={snapshot:()=>({playing,position:{x:player.x,y:player.y,z:player.z},velocity:{x:player.vx,y:player.vy,z:player.vz},speed:player.speed,state:player.state,grounded:player.grounded,height:player.height,version:'3.0',match:match.snapshot(),health:match.player.health,shield:match.player.shield,reserve:arsenal.reserve,autoReload:arsenal.autoReload,diagnostic,editing:editor.editing,yaw:input.yaw,pitch:input.pitch,weapon:arsenal.weapon.id,ammo:arsenal.ammo,reloading:!!arsenal.reload,mode:arsenal.mode,preferences:{...preferences},metrics:{...metrics},horizontalFov:params.hFov,verticalFov:view.camera.fov,aspect:view.camera.aspect,fps,drawCalls:view.stats.calls,triangles:view.stats.triangles,shots,hits,params:{...params}})};
+  window.kinetic={snapshot:()=>({playing,position:{x:player.x,y:player.y,z:player.z},velocity:{x:player.vx,y:player.vy,z:player.vz},speed:player.speed,state:player.state,grounded:player.grounded,height:player.height,version:'3-operaciones',match:match.snapshot(),health:match.player.health,shield:match.player.shield,reserve:arsenal.reserve,autoReload:arsenal.autoReload,diagnostic,editing:editor.editing,yaw:input.yaw,pitch:input.pitch,weapon:arsenal.weapon.id,ammo:arsenal.ammo,reloading:!!arsenal.reload,mode:arsenal.mode,preferences:{...preferences},metrics:{...metrics},horizontalFov:params.hFov,verticalFov:view.camera.fov,aspect:view.camera.aspect,fps,drawCalls:view.stats.calls,triangles:view.stats.triangles,shots,hits,params:{...params}})};
   if(diagnostic){
-    const qa={player,input,view,arsenal,editor,preferences,minimap,reticle,pause,start,tab,match,beginSimulation};window.kineticQA=qa;
-    const run=document.createElement('button');run.id='qa-run';run.textContent='Ejecutar pruebas HUD';run.className='qa-run';document.body.append(run);
-    run.onclick=async()=>{run.disabled=true;try{const {runHUDChecks}=await import('./verify-hud-v3.js');const result=await runHUDChecks(qa);const box=document.createElement('pre');box.id='qa-results';box.className='qa-results';box.textContent=JSON.stringify(result,null,2);document.getElementById('qa-results')?.remove();document.body.append(box);run.textContent=result.passed+' / '+result.total+' HUD';}catch(e){run.textContent='Error: '+e.message;console.error(e);}finally{run.disabled=false;}};
+    const advance=(count=1)=>{cancelAnimationFrame(frame);for(let i=0;i<count;i++){const now=performance.now();lastTime=now-1000/60;tick(now);cancelAnimationFrame(frame);}frame=requestAnimationFrame(tick);};
+    const qa={advance,player,input,view,arsenal,editor,preferences,minimap,reticle,pause,start,tab,match,beginSimulation,combatUI,aimSupport};window.kineticQA=qa;
+    // Diagnostic state remains available; the old three-slot UI suite is not part of this patch.
+
   }
 }catch(error){
   console.error(error);$('load-status').hidden=true;$('fatal-text').textContent=error.message+' — Abre el proyecto mediante GitHub Pages (HTTPS), con todos sus archivos en la misma carpeta.';$('fatal').hidden=false;
