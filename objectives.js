@@ -10,24 +10,24 @@ export class Objectives{
  this.zones=[[-7,30],[-29,7],[40,5],[11,-32]].map(([x,z],i)=>({id:'ABCD'[i],...node(x,z),radius:3.8,owner:null,progress:0,capturing:null,occupant:null,contested:false,counts:{blue:0,red:0}}));this.scoreClock=0;for(const a of m.actors)a.carrying=null;
  }
  home(flag){Object.assign(flag,flag.home,{state:'home',carrier:null,returnAt:0});}
- onDeath(a){if(!a.carrying)return;const flag=this.flags.find(f=>f.team===a.carrying);if(flag){const n=this.match.nav.nearest(a.body);Object.assign(flag,{x:n.x,y:n.y,z:n.z,state:'dropped',carrier:null,returnAt:this.match.time+25});}a.carrying=null;}
+ onDeath(a){if(!a.carrying)return;const flag=this.flags.find(f=>f.team===a.carrying);if(flag){const n=this.match.nav.nearest(a.body);Object.assign(flag,{x:n.x,y:n.y,z:n.z,state:'dropped',carrier:null,returnAt:this.match.time+25});this.match.events.push({type:'flag-dropped',actor:a.id,team:a.team,flagTeam:flag.team,position:{x:flag.x,y:flag.y,z:flag.z}});}a.carrying=null;}
  near(a,p,r){return a.alive&&distance(a.body,p)<=r&&Math.abs(a.body.y-p.y)<1.3&&obstruction(this.match.world.colliders,{x:a.body.x,y:a.body.y+.7,z:a.body.z},{x:p.x,y:p.y+.7,z:p.z})>.999;}
  step(dt){const m=this.match;if(!this.active)return;
   if(m.config.mode==='ctf'){
    for(const f of this.flags){if(f.state==='carried'){const carrier=m.actors.find(a=>a.id===f.carrier);if(carrier?.alive){f.x=carrier.body.x;f.y=carrier.body.y;f.z=carrier.body.z;}else if(carrier)this.onDeath(carrier);}
-    if(f.state==='dropped'&&m.time>=f.returnAt)this.home(f);
+    if(f.state==='dropped'&&m.time>=f.returnAt){this.home(f);m.events.push({type:'flag-return',actor:-1,team:f.team});}
     // Friendly recovery has priority in a simultaneous touch.
-    if(f.state==='dropped'&&m.actors.some(a=>a.team===f.team&&this.near(a,f,1.4))){this.home(f);m.events.push({type:'flag-return',actor:-1,team:f.team,position:f});}
+    const recoverer=f.state==='dropped'?m.actors.find(a=>a.team===f.team&&this.near(a,f,1.4)):null;if(recoverer){this.home(f);m.events.push({type:'flag-return',actor:recoverer.id,team:f.team,position:f});}
     if(f.state!=='carried'){const taker=m.actors.find(a=>a.team!==f.team&&!a.carrying&&this.near(a,f,1.35));if(taker){f.state='carried';f.carrier=taker.id;taker.carrying=f.team;m.events.push({type:'flag-taken',actor:taker.id,position:f});}}
    }
    for(const a of m.actors)if(a.alive&&a.carrying){const own=this.flags.find(f=>f.team===a.team),enemy=this.flags.find(f=>f.team===a.carrying);if(own.state==='home'&&this.near(a,own.home,1.7)){m.score[a.team]++;a.captures=(a.captures||0)+1;a.carrying=null;this.home(enemy);m.events.push({type:'capture',actor:a.id,team:a.team,position:own.home});}}
   }else{
    for(const z of this.zones){let blue=0,red=0;for(const a of m.actors)if(this.near(a,z,z.radius)){if(a.team==='blue')blue++;else red++;}z.counts={blue,red};z.contested=blue>0&&red>0;z.occupant=z.contested?null:blue?'blue':red?'red':null;
-    if(z.contested||!z.occupant)continue;const team=z.occupant,n=team==='blue'?blue:red,delta=dt/captureSeconds(n);
-    if(z.owner===team){if(z.progress>0)z.progress=Math.max(0,z.progress-delta);if(!z.progress)z.capturing=null;continue;}
+    if(z.owner&&(z.contested||z.capturing&&z.capturing!==z.owner))z.hadPressure=true;if(z.contested||!z.occupant)continue;const team=z.occupant,n=team==='blue'?blue:red,delta=dt/captureSeconds(n);
+    if(z.owner===team){if(z.progress>0)z.progress=Math.max(0,z.progress-delta);if(!z.progress){z.capturing=null;if(z.hadPressure){m.events.push({type:'zone-defended',actor:-1,team,zone:z.id});z.hadPressure=false;}}continue;}
     if(z.capturing&&z.capturing!==team){z.progress=Math.max(0,z.progress-delta);if(!z.progress)z.capturing=team;continue;}
     z.capturing=team;z.progress=Math.min(1,z.progress+delta);
-    if(z.progress>=1-1e-8){if(z.owner){z.owner=null;z.progress=0;}else{z.owner=team;z.progress=0;z.capturing=null;m.events.push({type:'zone-captured',actor:-1,team,zone:z.id,position:z});}}
+    if(z.progress>=1-1e-8){if(z.owner){z.owner=null;z.progress=0;z.hadPressure=false;m.events.push({type:'zone-neutralized',actor:-1,team,zone:z.id});}else{z.owner=team;z.progress=0;z.capturing=null;m.events.push({type:'zone-captured',actor:-1,team,zone:z.id,position:z});}}
    }
    this.scoreClock+=dt;while(this.scoreClock>=1){this.scoreClock--;for(const z of this.zones)if(z.owner)m.score[z.owner]++;}
   }

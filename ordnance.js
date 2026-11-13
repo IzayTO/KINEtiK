@@ -1,7 +1,7 @@
 import {clamp,circleContact,surfaceY} from './physics.js';
 import {obstruction,distance,angleDelta} from './navigation.js';
-export const THROWABLES=Object.freeze({grenade:{name:'GRANADA',count:3,radius:5},molotov:{name:'MOLOTOV',count:3,radius:4.5},gas:{name:'GAS N-09',count:2,radius:2.5}});
-export const PROJECTILE_LIMIT=48,AREA_LIMIT=64;
+export const THROWABLES=Object.freeze({grenade:{name:'GRANADA',count:3,radius:5},molotov:{name:'MOLOTOV',count:3,radius:11.5},gas:{name:'GAS N-09',count:2,radius:2.5}});
+export const PROJECTILE_LIMIT=48,AREA_LIMIT=64,GAS_ACTIVE=10,GAS_FADE=1;
 const pos=a=>({x:a.body.x,y:a.body.y+Math.min(1.35,a.body.height*.75),z:a.body.z});
 export function floorAt(world,p,down=15){let best=null;for(const c of world.query(p.x,p.z,.02)){if(!circleContact(c,p.x,p.z,.001)?.inside)continue;const y=surfaceY(c,p.x,p.z);if(y<=p.y+.12&&y>=p.y-down&&(!best||y>best.y))best={x:p.x,y,z:p.z,c};}return best;}
 // Swept radius against existing convex solids; no changes to character physics.
@@ -13,7 +13,7 @@ export function projectileTrace(world,a,b,r=.075){let fraction=1,solid=null,poin
 }
 export function launchState(a,yaw,pitch){const o=pos(a),cp=Math.cos(pitch);return{x:o.x,y:o.y+.08,z:o.z,vx:-Math.sin(yaw)*cp*17,vy:Math.sin(pitch)*17+3.4,vz:-Math.cos(yaw)*cp*17};}
 export function advanceProjectile(world,p,dt,gravity=24){const end={x:p.x+p.vx*dt,y:p.y+p.vy*dt-.5*gravity*dt*dt,z:p.z+p.vz*dt},hit=projectileTrace(world,p,end);p.vy-=gravity*dt;if(hit){const t=Math.max(0,hit.fraction-.002);p.x+=(end.x-p.x)*t;p.y+=(end.y-p.y)*t;p.z+=(end.z-p.z)*t;return hit;}Object.assign(p,end);return null;}
-export function trajectory(world,a,yaw,pitch,gravity=24){const p=launchState(a,yaw,pitch),points=[{x:p.x,y:p.y,z:p.z}];for(let i=0;i<210;i++){const hit=advanceProjectile(world,p,1/60,gravity);if(i%3===0||hit)points.push({x:p.x,y:p.y,z:p.z});if(hit)return{points,landing:{x:p.x,y:p.y,z:p.z},hit:true};}return{points,landing:{x:p.x,y:p.y,z:p.z},hit:false};}
+export function trajectory(world,a,yaw,pitch,gravity=24,frequency=60){const p=launchState(a,yaw,pitch),points=[{x:p.x,y:p.y,z:p.z}];for(let i=0;i<Math.ceil(frequency*3.5);i++){const hit=advanceProjectile(world,p,1/frequency,gravity);if(i%Math.round(frequency/20)===0||hit)points.push({x:p.x,y:p.y,z:p.z});if(hit)return{points,landing:{x:p.x,y:p.y,z:p.z},hit:true};}return{points,landing:{x:p.x,y:p.y,z:p.z},hit:false};}
 export function fireRadius(area,time,angle=0){return THROWABLES.molotov.radius*clamp((time-area.start),0,1)*(.87+.08*Math.sin(angle*3+area.seed)+.05*Math.sin(angle*7-area.seed));}
 export class Ordnance{
  constructor(match){this.match=match;this.projectiles=Array.from({length:PROJECTILE_LIMIT},()=>({active:false}));this.areas=Array.from({length:AREA_LIMIT},()=>({active:false}));this.serial=0;this.reset();}
@@ -43,23 +43,23 @@ export class Ordnance{
   const hit=advanceProjectile(m.world,p,dt,m.params.gravity);if(hit){if(p.kind!=='grenade'){this.createArea(p);p.active=false;continue;}const n=hit.normal;if(n.y>.5){p.rest=true;p.explodeAt=time+1;p.vx=p.vy=p.vz=0;}else{const dot=p.vx*n.x+p.vy*n.y+p.vz*n.z;p.vx=(p.vx-2*dot*n.x)*.35;p.vy=(p.vy-2*dot*n.y)*.35;p.vz=(p.vz-2*dot*n.z)*.35;p.x+=n.x*.02;p.y+=n.y*.02;p.z+=n.z*.02;}}
   if(time-p.born>8||p.y< -4){p.active=false;}
  }
- for(const z of this.areas){if(!z.active)continue;const age=time-z.start;if(age>(z.kind==='molotov'?26:z.kind==='gas'?3.5:1.5)){z.active=false;continue;}
+ for(const z of this.areas){if(!z.active)continue;const age=time-z.start;if(age>(z.kind==='molotov'?26:z.kind==='gas'?GAS_ACTIVE+GAS_FADE:1.5)){z.active=false;continue;}
   if(z.kind==='molotov'&&age<11&&time>=z.nextDamage){z.nextDamage=time+.5;for(const a of m.actors)if(this.inside(z,a)){const amount=12*(age<=8?1:clamp((11-age)/3,0,1));if(amount>.1){if(m.damage(a,amount,z.owner,'molotov',{self:true,position:z}))a.burnUntil=time+.65;}}}
   if(z.kind==='molotov'&&age<10&&time>=z.nextSound){z.nextSound=time+.7;m.events.push({type:'fire-loop',actor:-1,position:z});}
  }
- for(const a of m.actors){if(!a.alive)continue;let gas=null;if(time>=a.gasImmuneUntil)for(const z of this.areas)if(z.active&&z.kind==='gas'&&time-z.start<2.5&&this.inside(z,a)){gas=z;break;}
+ for(const a of m.actors){if(!a.alive)continue;let gas=null;if(time>=a.gasImmuneUntil)for(const z of this.areas)if(z.active&&z.kind==='gas'&&time-z.start<GAS_ACTIVE&&this.inside(z,a)){gas=z;break;}
   a.exposure=gas?a.exposure+dt:0;if(gas&&a.exposure>=1&&!a.poison){a.poison={start:time,end:time+8,next:time+2,owner:gas.owner,origin:{x:gas.x,y:gas.y,z:gas.z}};a.exposure=0;}
   if(a.poison){const poison=a.poison;if(time+1e-8>=poison.next&&poison.next<=poison.end+1e-7){m.damage(a,20,poison.owner,'gas',{self:true,healthOnly:true,nonlethal:true,position:poison.origin});poison.next+=2;}if(time>=poison.end+1e-6)a.poison=null;}
  }
  }
- dangers(){return [...this.projectiles.filter(p=>p.active&&p.kind==='grenade'),...this.areas.filter(z=>z.active&&((z.kind==='molotov'&&this.match.time-z.start<11)||(z.kind==='gas'&&this.match.time-z.start<2.5)))];}
+ dangers(){return [...this.projectiles.filter(p=>p.active&&p.kind==='grenade'),...this.areas.filter(z=>z.active&&((z.kind==='molotov'&&this.match.time-z.start<11)||(z.kind==='gas'&&this.match.time-z.start<GAS_ACTIVE)))];}
  known(b){const time=this.match.time;if(time-b.knownAt<.045)return b.knownHazards;b.knownAt=time;b.knownHazards=this.dangers().filter(z=>{const seen=b.hazardMemory.get(z.id);return seen!==undefined&&seen<=time;});return b.knownHazards;}
- risk(p,hazards){let cost=0;for(const z of hazards){const r=z.kind==='grenade'?6:z.kind==='gas'?3.3:5.4;if(Math.abs(p.y-z.y)<2.5&&distance(p,z)<r)cost+=30*(1-distance(p,z)/r)+5;}return cost;}
+ risk(p,hazards){let cost=0;for(const z of hazards){const r=z.kind==='grenade'?6:z.kind==='gas'?3.3:THROWABLES.molotov.radius+1.2;if(Math.abs(p.y-z.y)<2.5&&distance(p,z)<r)cost+=30*(1-distance(p,z)/r)+5;}return cost;}
  safeSegment(b,a,c){const hazards=this.known(b);return !this.risk(c,hazards)&&!this.risk({x:(a.x+c.x)/2,y:(a.y+c.y)/2,z:(a.z+c.z)/2},hazards);}
  botDecision(b,diff){const m=this.match,time=m.time,p=b.body;
-  const dangers=this.dangers();for(const z of dangers)if(!b.hazardMemory.has(z.id)&&distance(p,z)<13&&(distance(p,z)<2||Math.abs(angleDelta(b.yaw,Math.atan2(-(z.x-p.x),-(z.z-p.z))))<1.65)&&Math.abs(p.y-z.y)<5&&obstruction(m.world.colliders,pos(b),{x:z.x,y:z.y+.15,z:z.z})>.99)b.hazardMemory.set(z.id,time+diff.reaction*b.traits.reaction);
+  const dangers=this.dangers();for(const z of dangers)if(!b.hazardMemory.has(z.id)&&distance(p,z)<18&&(distance(p,z)<2||Math.abs(angleDelta(b.yaw,Math.atan2(-(z.x-p.x),-(z.z-p.z))))<1.65)&&Math.abs(p.y-z.y)<5&&obstruction(m.world.colliders,pos(b),{x:z.x,y:z.y+.15,z:z.z})>.99)b.hazardMemory.set(z.id,time+diff.reaction*b.traits.reaction);
   for(const id of b.hazardMemory.keys())if(!dangers.some(z=>z.id===id))b.hazardMemory.delete(id);
-  const known=this.known(b);if(this.risk(p,known)>0){let goal=null,best=Infinity;const component=m.nav.nearest(p).component;for(const n of m.nav.nodes){const d=distance(p,n);if(d<3||d>13||n.component!==component||n.low||n.edges.length<3||this.risk(n,known)>0)continue;const score=d+Math.abs(n.y-p.y)*3;if(score<best){best=score;goal=n;}}if(goal){b.state='RETIRARSE';b.evadeUntil=time+1;b.positionPlanUntil=0;m.setGoal(b,goal);b.routePending=true;return true;}}
+  const known=this.known(b);if(this.risk(p,known)>0){let goal=null,best=Infinity;const component=m.nav.nearest(p).component;for(const n of m.nav.nodes){const d=distance(p,n);if(d<3||d>22||n.component!==component||n.low||n.edges.length<3||this.risk(n,known)>0)continue;const score=d+Math.abs(n.y-p.y)*3;if(score<best){best=score;goal=n;}}if(goal){b.state='RETIRARSE';b.evadeUntil=time+1;b.positionPlanUntil=0;m.setGoal(b,goal);b.routePending=true;return true;}}
   if(time<b.evadeUntil)return true;
   if(b.poison&&time-b.poison.start>diff.reaction+.35)this.antidote(b);
   if(time<b.nextThrow||b.throwAction)return false;
@@ -69,8 +69,8 @@ export class Ordnance{
   let kinds=b.profile.name==='Defensivo'?['molotov','gas','grenade']:b.profile.name==='Táctico'?['gas','molotov','grenade']:['grenade','molotov','gas'];if(b.health<40)kinds=['gas','molotov','grenade'];const kind=kinds.find(k=>b.equipment[k]>0);if(!kind)return false;
   if(b.rng()>.30+.30*diff.tactics+.15*b.profile.advance)return false;
   const yaw=Math.atan2(-(target.x-p.x),-(target.z-p.z));let best=null;if(Math.abs(angleDelta(b.yaw,yaw))>.5)return false;
-  for(const pitch of [-.05,.14,.32,.50,.68]){const path=trajectory(m.world,b,yaw,pitch,m.params.gravity),landing=path.landing,score=distance(landing,target)+Math.abs(landing.y-target.y)*2;if(path.hit&&distance(p,landing)>6&&score<(best?.score??5))best={pitch,score,landing};}
-  if(!best||m.actors.some(a=>a!==b&&a.alive&&!m.enemy(b,a)&&distance(a.body,best.landing)<5))return false;
+  for(const pitch of [-.05,.14,.32,.50,.68]){const path=trajectory(m.world,b,yaw,pitch,m.params.gravity),landing=path.landing,score=distance(landing,target)+Math.abs(landing.y-target.y)*2;if(path.hit&&distance(p,landing)>(kind==='molotov'?THROWABLES.molotov.radius+1:6)&&score<(best?.score??5))best={pitch,score,landing};}
+  if(!best||m.actors.some(a=>a!==b&&a.alive&&!m.enemy(b,a)&&distance(a.body,best.landing)<(kind==='molotov'?THROWABLES.molotov.radius+1:5)))return false;
   if(this.select(b,kind)){if(this.trigger(b,yaw,best.pitch)){b.nextThrow=time+7+b.rng()*8;return false;}b.held=null;}return false;
  }
 }
