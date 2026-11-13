@@ -36,11 +36,12 @@ export function createAirport(){
  box('gate bridge',-33,3.02,-12,22,.36,4,'light');rail(-33,3.2,-14,22,.12);rail(-33,3.2,-10,22,.12);
  ramp('gate access ramp',-14,-12,17,4,0,3.2,'x',-1);
  for(const x of [-36,-24])box('bridge column',x,1.5,-12,.5,3,.5,'steel');
- box('gate canopy',-28,5.4,-12,8,.16,4.6,'steel');
+ box('gate canopy',-28,6.1,-12,8,.16,4.6,'steel');
+ for(const z of [-14.25,-9.75])box('canopy side frame',-30,4.65,z,.15,2.9,.15,'dark');
  sign('01 / TERMINAL','SALIDAS · EQUIPAJE · CONEXIONES',-42,5.7,33.35,9);
- sign('PUERTA 12','EMBARQUE / ACCESO A PLATAFORMA',-29.6,5,-12,7,Math.PI/2,'yellow');
+ sign('PUERTA 12','EMBARQUE / ACCESO A PLATAFORMA',-29.65,6.3,-12,6,Math.PI/2,'yellow');
  sign('LLEGADAS','RECOGIDA DE EQUIPAJE',-53.62,2.9,20,6,Math.PI/2);
- sign('CONTROL DE ACCESO','MEZZANINE +3.20',-49,5,-28.65,6);
+ sign('CONTROL DE ACCESO','MEZZANINE +3.20',-49,6.2,-28.65,6);
  // North maintenance hangar. Front and side exits, roof access via loading ramp.
  box('hangar slab',14,.012,-35,32,.024,24,'light',false);
  box('hangar rear',14,3.4,-47,32,6.8,.6);box('hangar west',-2,3.4,-35,.6,6.8,24);
@@ -56,14 +57,20 @@ export function createAirport(){
   box('cargo container',x,h/2,z,w,h,d,'steel');box('cargo top',x,h+.045,z,w+.1,.09,d+.1,'light',false);
   for(let p=x-w/2+.7;p<x+w/2;p+=1.1)box('container rib',p,h/2,z+d/2+.02,.075,h-.16,.06,'dark',false);
  }
- ramp('cargo ramp',46,-5,5,12,0,2.8,'z',-1);
- box('cargo platform',46,2.65,-11,6,.3,2,'light');rail(49,2.8,-12,.15,5);
+ ramp('cargo ramp',46,-4,5,12,0,2.8,'z',-1);
+ box('cargo platform',46,2.65,-10.5,6,.3,1,'light');rail(49,2.8,-12,.15,5);
  sign('03 / CARGA','ALMACÉN · RAMPA · PERÍMETRO',46,2.05,-10.91,6,0,'yellow');
  // Control office and tall observation room, kept outside the main fighting lanes.
- box('control office',-16,1.5,37,10,3,8,'concrete');ramp('office ramp',-16,25,5,16,0,3,'z',1);
+ // Walkable service office; roof joins the ramp at exactly the same elevation.
+ box('office roof',-16,3.0,37,10.4,.30,8.4,'concrete');ramp('office ramp',-16,25,5,16,0,3.15,'z',1);
+ box('office rear',-16,1.4,33,10,2.8,.35,'concrete');
+ for(const x of [-21,-11]){box('office side sill',x,.5,37,.35,1,8,'concrete');box('office window',x,1.8,37,.12,1.6,7.6,'glass');box('office fascia',x,2.8,37,.4,.5,8,'steel');for(const z of [34.3,36.9,39.5])box('office mullion',x,1.8,z,.22,1.6,.10,'dark',false);}
+ for(const x of [-19.5,-12.5])box('office front',x,1.4,41,3,2.8,.35,'concrete');box('office door lintel',-16,2.7,41,4,.6,.35,'steel');
+ box('office counter',-19,.55,35.5,2,1.1,2,'light');box('office console',-19,1.35,35,.8,.5,.1,'dark',false);
  box('tower stem',-20,7,41,2,14,2,'steel');box('tower cabin base',-20,13.5,41,6,.45,5,'dark');
  box('tower glass',-20,14.7,41,5.6,2,4.6,'glass');box('tower roof',-20,15.9,41,6.8,.28,5.8,'dark');
- sign('04 / TORRE','SERVICIOS / ACCESO A CUBIERTA',-16,2,41.1,7);
+ sign('04 / TORRE','SERVICIOS / CUBIERTA',-16,2.65,41.2,4);
+ function barrel(id,x,y,z,r,length,mat){const positions=[],n=10;for(let i=0;i<n;i++){const a=i/n*Math.PI*2,b=(i+1)/n*Math.PI*2,A=[x+Math.cos(a)*r,y+Math.sin(a)*r,z-length/2],B=[x+Math.cos(b)*r,y+Math.sin(b)*r,z-length/2],C=[B[0],B[1],z+length/2],D=[A[0],A[1],z+length/2];positions.push(...A,...D,...B,...B,...D,...C,x,y,z-length/2,...B,...A,x,y,z+length/2,...D,...C);}visuals.push({type:'mesh',id,mat,positions});}
  function aircraft(cx,cz,scale=1,paint='white'){
   const triangles=[],sections=[[-14,.05,1.9],[-12,.85,2],[-9,1.42,2.35],[6,1.35,2.4],[10,.7,2.6],[12,.1,2.75]],N=8;
   const point=(s,i)=>{const angle=i/N*Math.PI*2;return[cx+Math.cos(angle)*s[1]*scale,(s[2]+Math.sin(angle)*s[1]*.82)*scale,cz+s[0]*scale];};
@@ -76,7 +83,11 @@ export function createAirport(){
   visuals.pop(); // collider is independent from the rounded visible fuselage
   for(const side of [-1,1]){
    const poly=[[.8,-2],[11,3],[11,5],[1,2]].map(([x,z])=>[cx+x*side*scale,cz+z*scale]);if(side<0)poly.reverse();prism('aircraft wing',poly,2.05*scale,2.27*scale,paint);
-   box('engine nacelle',cx+4*side*scale,1.65*scale,cz+1.1*scale,1.4*scale,1.3*scale,3.3*scale,'steel');box('engine inlet',cx+4*side*scale,1.65*scale,cz-.57*scale,1.1*scale,1.02*scale,.06,'dark',false);
+   // Faceted round nacelles and recessed intake, with a simple matching solid envelope.
+   const ex=cx+4*side*scale,ey=1.65*scale,ez=cz+1.1*scale;
+   barrel('engine nacelle',ex,ey,ez,.7*scale,3.3*scale,'steel');barrel('engine intake',ex,ey,ez-1.66*scale,.54*scale,.025,'dark');
+   solids.push(makeCollider(rectPoly(ex,ez,1.35*scale,3.3*scale),ey-.65*scale,ey+.65*scale,'engine envelope'));
+   box('engine pylon',ex,2.15*scale,ez,.15*scale,.6*scale,1.7*scale,'light',false);
    const tail=[[.5,8],[4.4,10.5],[4.4,11.4],[.5,10.5]].map(([x,z])=>[cx+x*side*scale,cz+z*scale]);if(side<0)tail.reverse();prism('tail plane',tail,2.9*scale,3.05*scale,'dark');
    for(let z=-7;z<6;z+=1.5)box('aircraft window',cx+side*1.34*scale,2.7*scale,cz+z*scale,.035,.28*scale,.48*scale,'glass',false);
    box('landing wheel',cx+side*1.4*scale,.42*scale,cz+2*scale,.32*scale,.84*scale,.84*scale,'dark');box('wheel strut',cx+side*1.4*scale,1.05*scale,cz+2*scale,.12*scale,1.25*scale,.12*scale,'steel');
@@ -91,7 +102,14 @@ export function createAirport(){
  box('tug body',-9,.55,14,2,1.1,3.8,'yellow');box('tug cab',-9,1.35,15,1.7,1.1,1.5,'dark');
  for(const x of [-10.05,-7.95])for(const z of [12.8,15.2])box('tug tire',x,.35,z,.28,.7,.7,'dark');
  for(const z of [21,25]){box('baggage cart',-24,.6,z,2.7,.3,3,'steel');box('baggage load',-24,1.25,z,2.4,1,2.6,'dark');for(const x of [-25.1,-22.9])box('cart wheel',x,.28,z,.24,.56,1.6,'dark');}
- for(let i=0;i<11;i++)box('mobile aircraft stairs',1,((i+1)*.19)/2, -8-i*.45,2.1,(i+1)*.19,.45,'light');
+ // A full stair run meets a level boarding platform alongside the forward door.
+ for(let i=0;i<12;i++)box('boarding step',-1.8+i*.43,((i+1)*.19)/2,-6.4,.43,(i+1)*.19,1.9,'light');
+ box('boarding platform',3.45,2.18,-6.4,.9,.2,1.9,'light');
+ for(const z of [-7.43,-5.37]){box('boarding handrail',.565,2.235,z,5.17,.07,.07,'steel',false);visuals[visuals.length-1].tiltZ=Math.atan(.19/.43);for(const x of [-1.8,2.93])box('boarding rail post',x,.69+(x+1.8)*.19/.43,z,.07,1.0,.07,'steel',false);box('boarding top rail',3.45,2.78,z,.9,1,.08,'dark');}
+ box('boarding door surround',3.57,2.6,-6.4,.035,1.45,.77,'steel',false);box('boarding door',3.54,2.59,-6.4,.04,1.28,.63,'light',false);
+ // Pedestrian stripes and wheel chocks make service objects read as placed, not intersecting.
+ for(const z of [-7.8,-5])line(.5,z,5.2,.08,'yellow');
+ for(const x of [3.6,6.4])box('wheel chock',x,.10,2.65,.5,.20,.22,'yellow');
  for(let z=-45;z<=45;z+=6){line(59,z,.15,2.8,'white');line(-23,z,.15,2.8,'white');}
  for(const x of [5,34]){line(x,x===5?7:33,.14,21);line(x,x===5?17:43,16,.13);}
  for(let i=0;i<7;i++)line(-42+i*1.6,40,.85,5,'white');

@@ -1,6 +1,6 @@
 import {clamp,circleContact,surfaceY} from './physics.js';
 import {obstruction,distance,angleDelta} from './navigation.js';
-export const THROWABLES=Object.freeze({grenade:{name:'GRANADA',count:3,radius:7},molotov:{name:'MOLOTOV',count:3,radius:11.5},gas:{name:'GAS N-09',count:2,radius:2.5},rocket:{name:'R-12 / LANZACOHETES',count:0,radius:10}});
+export const THROWABLES=Object.freeze({grenade:{name:'GRANADA',count:3,radius:7},molotov:{name:'MOLOTOV',count:3,radius:11.5},gas:{name:'GAS N-09',count:2,radius:2.5},rocket:{name:'R-12 / LANZACOHETES',count:0,radius:20}});
 export const PROJECTILE_LIMIT=48,AREA_LIMIT=64,GAS_ACTIVE=10,GAS_FADE=1;
 const pos=a=>({x:a.body.x,y:a.body.y+Math.min(1.35,a.body.height*.75),z:a.body.z});
 export function floorAt(world,p,down=15){let best=null;for(const c of world.query(p.x,p.z,.02)){if(!circleContact(c,p.x,p.z,.001)?.inside)continue;const y=surfaceY(c,p.x,p.z);if(y<=p.y+.12&&y>=p.y-down&&(!best||y>best.y))best={x:p.x,y,z:p.z,c};}return best;}
@@ -31,7 +31,7 @@ export class Ordnance{
  this.match.sounds.push({id:p.owner.id,team:p.owner.team,x:z.x,y:z.y,z:z.z,radius:kind==='grenade'?32:kind==='molotov'?16:8,kind,expires:this.match.time+.7,stamp:this.match.time});if(this.match.sounds.length>40)this.match.sounds.shift();
  if(kind==='grenade')for(const a of this.match.actors){if(!this.affects(p.owner,a))continue;const q=pos(a),d=Math.hypot(q.x-z.x,Math.max(0,Math.abs(a.body.y-z.y)-.3),q.z-z.z);if(d>7||obstruction(this.match.world.colliders,{x:z.x,y:z.y+.1,z:z.z},q)<.999)continue;this.match.damage(a,d<=4+1e-9?1000:140*(7-d)/3,p.owner,'grenade',{self:true,position:z});}
  }
- rocketBlast(p){const m=this.match,o={x:p.x,y:p.y,z:p.z};for(const a of m.actors){if(!this.affects(p.owner,a))continue;const q=pos(a),d=Math.hypot(q.x-o.x,q.z-o.z,Math.max(0,Math.abs(a.body.y-o.y)-.3));if(d>10||obstruction(m.world.colliders,o,q)<.999)continue;m.damage(a,d<=7+1e-9?1000:175*(10-d)/3,p.owner,'rocket',{self:true,nonlethal:d>7+1e-9,position:o});}}
+ rocketBlast(p){const m=this.match,o={x:p.x,y:p.y,z:p.z};for(const a of m.actors){if(!this.affects(p.owner,a))continue;const q=pos(a),d=Math.hypot(q.x-o.x,q.z-o.z,Math.max(0,Math.abs(a.body.y-o.y)-.3));if(d>20||obstruction(m.world.colliders,o,q)<.999)continue;m.damage(a,d<=16+1e-9?1000:175*(20-d)/4,p.owner,'rocket',{self:true,nonlethal:d>16+1e-9,position:o});}}
  affects(source,a){return a.alive&&(source===a||this.match.enemy(source,a));}
  inside(z,a){if(!this.affects(z.owner,a))return false;const p=a.body,angle=Math.atan2(p.z-z.z,p.x-z.x),r=z.kind==='molotov'?fireRadius(z,this.match.time,angle):2.5;
  if(distance(p,z)>r||Math.abs(p.y-z.y)>(z.kind==='gas'?2.5:1.2))return false;
@@ -46,7 +46,7 @@ export class Ordnance{
   const hit=advanceProjectile(m.world,p,dt,p.kind==='rocket'?0:m.params.gravity);if(hit){if(p.kind!=='grenade'){this.createArea(p);p.active=false;continue;}const n=hit.normal;if(n.y>.5){p.rest=true;p.explodeAt=time+1;p.vx=p.vy=p.vz=0;}else{const dot=p.vx*n.x+p.vy*n.y+p.vz*n.z;p.vx=(p.vx-2*dot*n.x)*.35;p.vy=(p.vy-2*dot*n.y)*.35;p.vz=(p.vz-2*dot*n.z)*.35;p.x+=n.x*.02;p.y+=n.y*.02;p.z+=n.z*.02;}}
   if(time-p.born>8||p.y< -4){p.active=false;}
  }
- for(const z of this.areas){if(!z.active)continue;const age=time-z.start;if(age>(z.kind==='rocket'?20:z.kind==='molotov'?26:z.kind==='gas'?GAS_ACTIVE+GAS_FADE:1.5)){z.active=false;continue;}
+ for(const z of this.areas){if(!z.active)continue;const age=time-z.start;if(age>(z.kind==='airstrike'?30:z.kind==='rocket'?20:z.kind==='molotov'?26:z.kind==='gas'?GAS_ACTIVE+GAS_FADE:1.5)){z.active=false;continue;}
   if(z.kind==='molotov'&&age<11&&time>=z.nextDamage){z.nextDamage=time+.5;for(const a of m.actors)if(this.inside(z,a)){const amount=12*(age<=8?1:clamp((11-age)/3,0,1));if(amount>.1){if(m.damage(a,amount,z.owner,'molotov',{self:true,position:z}))a.burnUntil=time+.65;}}}
   if(z.kind==='molotov'&&age<10&&time>=z.nextSound){z.nextSound=time+.7;m.events.push({type:'fire-loop',actor:-1,position:z});}
  }

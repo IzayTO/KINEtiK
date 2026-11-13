@@ -71,7 +71,7 @@ export class WorldView {
       const boxes=this.level.visuals.filter(v=>v.type==='box'&&v.mat===name);
       if(boxes.length){
         const mesh=new THREE.InstancedMesh(boxGeometry,this.materials[name],boxes.length);
-        boxes.forEach((v,i)=>{temp.position.set(v.x,v.y,v.z);temp.rotation.set(0,-v.angle,0);temp.scale.set(v.w,v.h,v.d);temp.updateMatrix();matrix.copy(temp.matrix);mesh.setMatrixAt(i,matrix);});
+        boxes.forEach((v,i)=>{temp.position.set(v.x,v.y,v.z);temp.rotation.set(0,-v.angle,v.tiltZ||0);temp.scale.set(v.w,v.h,v.d);temp.updateMatrix();matrix.copy(temp.matrix);mesh.setMatrixAt(i,matrix);});
         mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();this.scene.add(mesh);this.shootables.push(mesh);
       }
       const custom=this.level.visuals.filter(v=>v.type==='mesh'&&v.mat===name);if(custom.length){const positions=custom.flatMap(v=>v.positions),g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));g.computeVertexNormals();g.computeBoundingSphere();const m=new THREE.Mesh(g,this.materials[name]);this.scene.add(m);this.shootables.push(m);}

@@ -90,9 +90,9 @@ export class V2World extends WorldView{
   const hit=this.ray(this.camera.position,direction,this.shootables,distance+.2);return this.targetOf(hit)===target?{...candidate,distance,visible:true}:null;
  }
  placePing(){
-  this.scene.updateMatrixWorld(true);this.camera.getWorldDirection(this.dir);let hit=this.ray(this.camera.position,this.dir,this.architecture,150),point=hit?.point.clone();
-  if(!point||Math.abs(point.x)>47.9||Math.abs(point.z)>47.9){point=null;const horizontal=Math.hypot(this.dir.x,this.dir.z)||1;
-   for(const distance of [24,16,8,3]){this.scratch.set(clamp(this.camera.position.x+this.dir.x/horizontal*distance,-47,47),30,clamp(this.camera.position.z+this.dir.z/horizontal*distance,-47,47));hit=this.ray(this.scratch,down,this.architecture,60);if(hit&&hit.face?.normal.y>.5&&this.collisionWorld.clear(hit.point.x,hit.point.y+.02,hit.point.z,1.82)){point=hit.point.clone();break;}}
+  const bounds=this.level.bounds||{minX:-47,maxX:47,minZ:-47,maxZ:47};this.scene.updateMatrixWorld(true);this.camera.getWorldDirection(this.dir);let hit=this.ray(this.camera.position,this.dir,this.architecture,150),point=hit?.point.clone();
+  if(!point||point.x<bounds.minX||point.x>bounds.maxX||point.z<bounds.minZ||point.z>bounds.maxZ){point=null;const horizontal=Math.hypot(this.dir.x,this.dir.z)||1;
+   for(const distance of [24,16,8,3]){this.scratch.set(clamp(this.camera.position.x+this.dir.x/horizontal*distance,bounds.minX,bounds.maxX),30,clamp(this.camera.position.z+this.dir.z/horizontal*distance,bounds.minZ,bounds.maxZ));hit=this.ray(this.scratch,down,this.architecture,60);if(hit&&hit.face?.normal.y>.5&&this.collisionWorld.clear(hit.point.x,hit.point.y+.02,hit.point.z,1.82)){point=hit.point.clone();break;}}
   }if(!point)return false;this.pingPosition=point;this.pingAge=0;this.pingMesh.position.copy(point);this.pingMesh.visible=true;return true;
  }
  pingScreen(){if(!this.pingPosition)return null;const d=this.camera.position.distanceTo(this.pingPosition);this.scratch.copy(this.pingPosition).project(this.camera);return{x:(this.scratch.x*.5+.5)*this.width,y:(-.5*this.scratch.y+.5)*this.height,distance:d,visible:this.scratch.z<1&&this.scratch.z>-1&&Math.abs(this.scratch.x)<.98&&Math.abs(this.scratch.y)<.95};}

@@ -9,10 +9,10 @@ export class BloodTrail{
  reset(){this.random=stream(0xb100d);this.next=0;this.poolNext=0;this.serial=0;this.walkers=new Map();for(const s of this.slots){s.born=-100;s.serial=++this.serial;}}
  surface(x,y,z,down=.4){let best=null;for(const c of this.world.query(x,z,.01)){if(!circleContact(c,x,z,.001)?.inside)continue;const h=surfaceY(c,x,z);if(h<=y+.13&&h>=y-down&&(!best||h>best.y))best={c,y:h};}return best;}
  stamp(actor,time,impact=false){const p=actor.body,r=this.random,severity=clamp((100-actor.health)/100,0,1),x=p.x+(r()-.5)*.16,z=p.z+(r()-.5)*.16,floor=this.surface(x,p.y,z,impact?3:.4);if(!floor)return false;
-  const s=this.slots[this.next];if(time-s.born<10)return false;this.next=(this.next+1)%(this.slots.length-16);
+  const s=this.slots[this.next];if(time-s.born<10)return false;this.next=(this.next+1)%(this.slots.length-32);
   Object.assign(s,{pool:false,born:time,serial:++this.serial,x,z,floor:floor.c,angle:r()*Math.PI*2,size:(impact?.21+.16*severity:.105+.14*severity)*(.72+r()*.65),stretch:.8+r()*.7,variant:Math.floor(r()*8),tone:.76+r()*.24});return true;
  }
- pool(actor,time){const p=actor.body,floor=this.surface(p.x,p.y,p.z,4);if(!floor)return false;const r=this.random,s=this.slots[this.slots.length-16+(this.poolNext++%16)];Object.assign(s,{pool:true,born:time,serial:++this.serial,x:p.x,z:p.z,floor:floor.c,angle:r()*Math.PI*2,size:3.5,stretch:1,variant:Math.floor(r()*8),tone:.8+r()*.18});return true;}
+ pool(actor,time,hold=5,end=10){const p=actor.body,floor=this.surface(p.x,p.y,p.z,4);if(!floor)return false;const r=this.random,s=this.slots[this.slots.length-32+(this.poolNext++%32)];Object.assign(s,{pool:true,hold,end,born:time,serial:++this.serial,x:p.x,z:p.z,floor:floor.c,angle:r()*Math.PI*2,size:3.5,stretch:1,variant:Math.floor(r()*8),tone:.8+r()*.18});return true;}
  wound(actor,healthLost,time){if(healthLost<=0)return;const prev=this.walkers.get(actor.id);if(!prev||time-prev.lastHit>=.065){this.stamp(actor,time,true);this.walkers.set(actor.id,{x:actor.body.x,z:actor.body.z,distance:0,next:.4+this.random(),lastHit:time});}}
  step(actors,time){for(const a of actors){const p=a.body;let s=this.walkers.get(a.id);
    if(!a.alive||a.health>=100){this.walkers.delete(a.id);continue;}
@@ -30,7 +30,7 @@ function patterns(){return Array.from({length:8},(_,index)=>{const r=stream(901+
 const PATTERNS=patterns(),POOLS=Array.from({length:8},(_,j)=>{const r=stream(127+j*383),ring=Array.from({length:36},(_,i)=>{const a=i/36*Math.PI*2,k=.80+r()*.20;return[Math.cos(a)*k,Math.sin(a)*k];});return ring.map((v,i)=>[[0,0],v,ring[(i+1)%ring.length]]);}),TRIANGLES=40,VERTICES=TRIANGLES*3;
 export class BloodMarks{
  constructor(scene){this.scene=scene;this.geometry=new T.BufferGeometry();this.positions=new Float32Array(BLOOD_CAPACITY*VERTICES*3);this.colors=new Float32Array(BLOOD_CAPACITY*VERTICES*4);this.geometry.setAttribute('position',new T.BufferAttribute(this.positions,3).setUsage(T.DynamicDrawUsage));this.geometry.setAttribute('color',new T.BufferAttribute(this.colors,4).setUsage(T.DynamicDrawUsage));
-  this.material=new T.MeshBasicMaterial({vertexColors:true,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1,side:T.DoubleSide});this.mesh=new T.Mesh(this.geometry,this.material);this.mesh.frustumCulled=false;this.mesh.renderOrder=2;scene.add(this.mesh);this.seen=new Int32Array(BLOOD_CAPACITY).fill(-1);this.counts=new Uint16Array(BLOOD_CAPACITY);this.alpha=new Float64Array(BLOOD_CAPACITY);this.base=new T.Color(0x70121d);this.source=null;
+  this.material=new T.MeshBasicMaterial({vertexColors:true,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1,side:T.DoubleSide});this.mesh=new T.Mesh(this.geometry,this.material);this.mesh.frustumCulled=false;this.mesh.renderOrder=3.2;scene.add(this.mesh);this.seen=new Int32Array(BLOOD_CAPACITY).fill(-1);this.counts=new Uint16Array(BLOOD_CAPACITY);this.alpha=new Float64Array(BLOOD_CAPACITY);this.base=new T.Color(0x70121d);this.source=null;
  }
  attach(source){this.source=source;this.seen.fill(-1);this.colors.fill(0);this.counts.fill(0);this.alpha.fill(0);this.geometry.attributes.color.needsUpdate=true;}
  write(slot,index){const start=index*VERTICES,cos=Math.cos(slot.angle),sin=Math.sin(slot.angle);let count=0;
@@ -42,7 +42,7 @@ export class BloodMarks{
   for(let i=count;i<VERTICES;i++){const j=(start+i)*3;this.positions[j]=this.positions[j+1]=this.positions[j+2]=0;this.colors[(start+i)*4+3]=0;}
   this.counts[index]=count;this.alpha[index]=-1;
  }
- update(time){if(!this.source)return;let positionChanged=false,colorChanged=false,visible=false;for(let i=0;i<BLOOD_CAPACITY;i++){const s=this.source.slots[i],fresh=this.seen[i]!==s.serial;if(fresh){this.seen[i]=s.serial;this.write(s,i);positionChanged=true;}const age=time-s.born,alpha=(s.pool?(age<0||age>=10?0:age<=5?1:(10-age)/5):bloodOpacity(age))*.86;
+ update(time){if(!this.source)return;let positionChanged=false,colorChanged=false,visible=false;for(let i=0;i<BLOOD_CAPACITY;i++){const s=this.source.slots[i],fresh=this.seen[i]!==s.serial;if(fresh){this.seen[i]=s.serial;this.write(s,i);positionChanged=true;}const age=time-s.born,alpha=(s.pool?(age<0||age>=s.end?0:age<=s.hold?1:(s.end-age)/(s.end-s.hold)):bloodOpacity(age))*.86;
    if(alpha!==this.alpha[i]){this.alpha[i]=alpha;for(let j=0;j<this.counts[i];j++)this.colors[(i*VERTICES+j)*4+3]=alpha;colorChanged=true;}
    visible ||= alpha>0&&this.counts[i]>0;
   }this.mesh.visible=visible;if(positionChanged)this.geometry.attributes.position.needsUpdate=true;if(colorChanged)this.geometry.attributes.color.needsUpdate=true;}

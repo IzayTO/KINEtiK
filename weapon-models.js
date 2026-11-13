@@ -13,6 +13,12 @@ export function buildModels(){
   const ring=new T.Mesh(new T.TorusGeometry(.043,.006,4,24),materials.dark);ring.position.set(0,.14,zRear);circle.add(ring);
   for(const x of [-.038,.038])box(square,.012,.065,.017,x,.14,zRear);
   box(square,.086,.012,.017,0,.1785,zRear);box(square,.086,.012,.017,0,.1015,zRear);
+  // Optical coating: transparent center and a subtle cool edge. The world is magnified
+  // by the existing ADS camera FOV, so this adds no second render, framebuffer or shader pass.
+  const glassMaterial=new T.MeshBasicMaterial({vertexColors:true,transparent:true,depthWrite:false,side:T.DoubleSide}),reticleMaterial=new T.LineBasicMaterial({color:0xe1e8ef,transparent:true,opacity:.66,depthWrite:false});
+  for(const [group,round]of [[square,false],[circle,true]]){const positions=[],colors=[],n=32;for(let i=0;i<n;i++)for(const [a,edge]of [[0,false],[i/n*Math.PI*2,true],[(i+1)/n*Math.PI*2,true]]){const cos=Math.cos(a),sin=Math.sin(a),radius=round?.036:.0318/Math.max(Math.abs(cos),Math.abs(sin));positions.push(edge?cos*radius:0,(edge?sin*radius:0)+.14,zRear+.002);colors.push(.39,.52,.67,edge?.19:.015);}const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(positions,3));g.setAttribute('color',new T.Float32BufferAttribute(colors,4));const glass=new T.Mesh(g,glassMaterial);glass.renderOrder=2;group.add(glass);
+   const ticks=new T.BufferGeometry().setFromPoints([[-.012,0],[-.004,0],[.004,0],[.012,0],[0,-.012],[0,-.004]].map(([x,y])=>new T.Vector3(x,y+.14,zRear+.003)));const marks=new T.LineSegments(ticks,reticleMaterial);marks.renderOrder=3;group.add(marks);
+  }
   box(g,.008,.047,.018,0,.1165,zFront,'accent');return{rear,front,squareSight:square,circleSight:circle};
  };
  const flash=(g,z)=>{const f=new T.Mesh(new T.ConeGeometry(.065,.16,5),new T.MeshBasicMaterial({color:0xffdc99,transparent:true,opacity:.9,depthWrite:false}));f.rotation.x=-Math.PI/2;f.position.set(0,.02,z);f.visible=false;g.add(f);return f;};

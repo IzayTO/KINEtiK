@@ -21,6 +21,8 @@ export class GameInterface{
   if(e.type==='zone-captured')this.notice('ZONA '+e.zone+' CONTROLADA','Equipo '+team(e.team),e.team);
   if(e.type==='zone-neutralized')this.notice('ZONA '+e.zone+' NEUTRALIZADA','Captura en curso · '+team(e.team),e.team);
   if(e.type==='zone-defended')this.notice('ZONA '+e.zone+' DEFENDIDA','Equipo '+team(e.team)+' mantiene el control',e.team);
+  if(e.type==='airstrike-earned')this.notice('APOYO AÉREO DISPONIBLE','20 bajas · '+e.count+' carga(s) guardada(s)');
+  if(e.type==='airstrike-called')this.notice('APOYO AÉREO EN CAMINO','Tres objetivos confirmados');
   if(e.type==='rc-earned')this.notice('RC EXPLOSIVO DISPONIBLE','10 bajas · '+e.count+' '+(e.count===1?'carga guardada':'cargas guardadas'));
  }
  frame(dt,editing,playing){const r=this.match.remote,a=this.match.player,rc=r.engaged&&a.alive&&playing,button=$('slot-rc'),shell=button.closest('.hud-shell');button.hidden=!editing&&!a.rcCharges;if(shell)shell.hidden=button.hidden;button.disabled=(!a.rcCharges||r.engaged)&&!editing;button.querySelector('.quantity').textContent='×'+(a.rcCharges||0);
