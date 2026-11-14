@@ -1,0 +1,6 @@
+import * as T from './three.module.min.js';
+// One bounded draw call. Camera-facing transforms refresh every rendered frame.
+export class Stars{
+ constructor(view){this.view=view;const shape=new T.Shape();for(let i=0;i<10;i++){const a=Math.PI/2+i*Math.PI/5,r=i%2?.20:.46,x=Math.cos(a)*r,y=Math.sin(a)*r;i?shape.lineTo(x,y):shape.moveTo(x,y);}shape.closePath();this.mesh=new T.InstancedMesh(new T.ShapeGeometry(shape),new T.MeshBasicMaterial({color:0xffffff,side:T.DoubleSide}),80);this.mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);this.mesh.frustumCulled=false;this.mesh.visible=false;view.scene.add(this.mesh);this.temp=new T.Object3D();this.color=new T.Color();}
+ update(){const m=this.view.match,list=m?.config.mode==='confirmed'?m.objectives.stars:[];this.mesh.count=list.length;this.mesh.visible=!!list.length;if(!list.length)return;for(let i=0;i<list.length;i++){const s=list[i],age=m.time-s.born;this.temp.position.set(s.x,s.y+.85+Math.sin(m.time*2.4+s.id)*.10,s.z);this.temp.quaternion.copy(this.view.camera.quaternion);this.temp.scale.setScalar(Math.min(1,age*7+.15)*Math.min(1,(60-age)/2));this.temp.updateMatrix();this.mesh.setMatrixAt(i,this.temp.matrix);this.mesh.setColorAt(i,this.color.setHex(s.team==='blue'?0x55b6ff:0xff665b));}this.mesh.instanceMatrix.needsUpdate=true;this.mesh.instanceColor.needsUpdate=true;}
+}

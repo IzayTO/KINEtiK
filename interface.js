@@ -2,7 +2,7 @@ import {clamp} from './physics.js';
 import {RC_CONNECT_SECONDS} from './rc.js';
 const $=id=>document.getElementById(id),team=t=>t==='blue'?'AZUL':'ROJO';
 // The same mode limits exposed by the menu; quick play always selects their upper tier.
-export function quickConfig(base={},rng=Math.random){const pick=xs=>xs[Math.min(xs.length-1,Math.floor(rng()*xs.length))];return{...base,mode:pick(['ffa','tdm','ctf','domination']),bots:pick([4,6,8]),difficulty:pick(['easy','normal','hard']),team:pick(['blue','red']),minutes:pick([10,15]),limit:100,captureLimit:10,dominationLimit:500,environment:pick(['day','night']),quality:'adaptive'};}
+export function quickConfig(base={},rng=Math.random){const pick=xs=>xs[Math.min(xs.length-1,Math.floor(rng()*xs.length))];return{...base,mode:pick(['ffa','tdm','ctf','domination','confirmed']),bots:pick([4,6,8]),difficulty:pick(['easy','normal','hard']),team:pick(['blue','red']),minutes:pick([10,15]),limit:100,captureLimit:10,dominationLimit:500,environment:pick(['day','night']),quality:'adaptive'};}
 export class GameInterface{
  constructor(view,match,input){Object.assign(this,{view,match,input});this.queue=[];this.current=null;this.noiseClock=0;this.noise=$('rc-noise');this.noiseContext=this.noise.getContext('2d');this.noise.width=160;this.noise.height=96;this.noiseImage=this.noiseContext.createImageData(160,96);this.age=0;this.lastRC='';this.screen=$('hud-backdrop');this.snapshotContext=this.screen.getContext('2d');this.remoteUnderlay=$('rc-underlay');this.remoteContext=this.remoteUnderlay.getContext('2d');$('slot-rc').querySelector('img').src=view.rcView.thumbnail();this.fireLabel=document.createElement('small');this.fireLabel.className='action-caption';document.querySelector('.fire-button').append(this.fireLabel);}
  reset(){this.goAge=-1;$('round-start').hidden=true;$('game').style.filter='';this.queue.length=0;this.current=null;this.age=0;$('objective-notice').hidden=true;this.lastRC='';document.body.classList.remove('rc-active','rc-lost');$('rc-monitor').hidden=true;this.input.remoteMode=false;this.remoteUnderlay.hidden=true;$('game').style.clipPath='';$('game').style.visibility='';document.body.classList.remove('rc-connecting');}
@@ -14,6 +14,8 @@ export class GameInterface{
  notice(title,detail='',color='mint'){const e={title,detail,color};if(this.queue.length>=5)this.queue.shift();this.queue.push(e);}
  onEvent(e){const a=this.match.actors.find(a=>a.id===e.actor),name=a?.name||e.name||'',t=e.team||a?.team;
   if(e.type==='round-live'){const phrases=['A GANAR','A VER QUÉ SALE','TÚ PUEDES','DALE CON TODO','AVANZA','LISTO','ES TU MOMENTO','HAZ QUE CUENTE','VAMOS EQUIPO','TODOS A UNA'];this.goMessage=phrases[Math.floor(Math.random()*phrases.length)];this.goAge=0;}
+  if(e.type==='kill-confirmed')this.notice('BAJA CONFIRMADA',name+' · +1 para '+team(e.team),e.team);
+  if(e.type==='kill-denied')this.notice(e.team!==this.match.player.team?'BAJA PERDIDA':'BAJA RECUPERADA',name+' recuperó una estrella',e.team);
   if(e.type==='flag-taken')this.notice('BANDERA ROBADA',name+' · rumbo a su base',t);
   if(e.type==='flag-dropped')this.notice('BANDERA CAÍDA',name+' soltó la bandera '+team(e.flagTeam),t);
   if(e.type==='flag-return')this.notice('BANDERA RECUPERADA',(name?name+' · ':'')+'Base '+team(e.team)+' asegurada',e.team);

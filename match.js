@@ -47,7 +47,7 @@ export class Match{
   this.events.push({type:'spawn',actor:a.id,position:copyPos(a.body)});
  }
  start(config={}){
-  this.config={...MATCH_DEFAULTS,...config};this.config.bots=clamp(Math.round(this.config.bots),1,20);if(!DIFFICULTY[this.config.difficulty])this.config.difficulty='normal';if(!['training','ffa','tdm','ctf','domination'].includes(this.config.mode))this.config.mode='training';
+  this.config={...MATCH_DEFAULTS,...config};this.config.bots=clamp(Math.round(this.config.bots),1,20);if(!DIFFICULTY[this.config.difficulty])this.config.difficulty='normal';if(!['training','ffa','tdm','ctf','domination','confirmed'].includes(this.config.mode))this.config.mode='training';
   this.config.captureLimit=clamp(Math.round(+this.config.captureLimit||3),1,30);this.config.dominationLimit=clamp(Math.round(+this.config.dominationLimit||200),50,1000);this.config.environment=this.config.environment==='night'?'night':'day';this.config.minutes=Number.isFinite(+this.config.minutes)?clamp(+this.config.minutes,0,120):5;this.config.limit=Number.isFinite(+this.config.limit)?clamp(Math.round(+this.config.limit),1,500):30;this.config.crateSeconds=Number.isFinite(+this.config.crateSeconds)?clamp(+this.config.crateSeconds,15,60):35;
   this.time=0;this.warmup=TEAM_MODES.includes(this.config.mode)?10:0;this.warmupElapsed=0;this.events.length=0;this.sounds.length=0;this.running=true;this.ended=false;this.score={red:0,blue:0};this.result=null;this.rng=randomStream(9021);this.actors=[this.player];this.bots=[];this.initialize(this.player);this.player.team=this.config.mode==='ffa'?'blue':this.config.team==='red'?'red':'blue';
   const names=botNames(this.config.bots);this.blood.reset();

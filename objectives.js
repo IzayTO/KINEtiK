@@ -1,19 +1,21 @@
 import {distance,obstruction} from './navigation.js';
 import {clamp} from './physics.js';
-export const TEAM_MODES=['tdm','ctf','domination'];
+export const TEAM_MODES=['tdm','ctf','domination','confirmed'];
 export const captureSeconds=count=>Math.max(4,10-1.5*(Math.max(1,count)-1));
 export class Objectives{
  constructor(match){this.match=match;this.flags=[];this.zones=[];this.reset();}
- get active(){return this.match.config.mode==='ctf'||this.match.config.mode==='domination';}
- reset(){const m=this.match;const node=(x,z)=>{const n=m.nav.nearest({x,y:0,z});return{x:n.x,y:n.y,z:n.z};};
+ get active(){return this.match.config.mode==='confirmed'||this.match.config.mode==='ctf'||this.match.config.mode==='domination';}
+ reset(){this.stars=[];this.starSerial=0;const m=this.match;const node=(x,z)=>{const n=m.nav.nearest({x,y:0,z});return{x:n.x,y:n.y,z:n.z};};
  this.flags=['blue','red'].map((team,i)=>{const base=m.level?.bases?.[team]||(i?[0,-36]:[-3,37]),home=node(...base);return{team,home,...home,state:'home',carrier:null,returnAt:0};});
  this.zones=(m.level?.objectiveZones||[[-7,30],[-29,7],[40,5],[11,-32]]).map(([x,z],i)=>({id:'ABCD'[i],...node(x,z),radius:3.8,owner:null,progress:0,capturing:null,occupant:null,contested:false,counts:{blue:0,red:0}}));this.scoreClock=0;for(const a of m.actors)a.carrying=null;
  }
  home(flag){Object.assign(flag,flag.home,{state:'home',carrier:null,returnAt:0});}
- onDeath(a){if(!a.carrying)return;const flag=this.flags.find(f=>f.team===a.carrying);if(flag){const n=this.match.nav.nearest(a.body);Object.assign(flag,{x:n.x,y:n.y,z:n.z,state:'dropped',carrier:null,returnAt:this.match.time+25});this.match.events.push({type:'flag-dropped',actor:a.id,team:a.team,flagTeam:flag.team,position:{x:flag.x,y:flag.y,z:flag.z}});}a.carrying=null;}
+ onDeath(a){if(this.match.config.mode==='confirmed'){if(this.stars.length>=80)this.stars.shift();this.stars.push({id:++this.starSerial,x:a.body.x,y:a.body.y,z:a.body.z,team:a.team,born:this.match.time});return;}if(!a.carrying)return;const flag=this.flags.find(f=>f.team===a.carrying);if(flag){const n=this.match.nav.nearest(a.body);Object.assign(flag,{x:n.x,y:n.y,z:n.z,state:'dropped',carrier:null,returnAt:this.match.time+25});this.match.events.push({type:'flag-dropped',actor:a.id,team:a.team,flagTeam:flag.team,position:{x:flag.x,y:flag.y,z:flag.z}});}a.carrying=null;}
  near(a,p,r){return a.alive&&distance(a.body,p)<=r&&Math.abs(a.body.y-p.y)<1.3&&obstruction(this.match.world.colliders,{x:a.body.x,y:a.body.y+.7,z:a.body.z},{x:p.x,y:p.y+.7,z:p.z})>.999;}
  step(dt){const m=this.match;if(!this.active)return;
-  if(m.config.mode==='ctf'){
+  if(m.config.mode==='confirmed'){
+   for(let i=this.stars.length-1;i>=0;i--){const s=this.stars[i];if(m.time-s.born>60){this.stars.splice(i,1);continue;}let collector=null,best=Infinity;for(const a of m.actors)if(this.near(a,s,1.1)){const d=distance(a.body,s);if(d<best){best=d;collector=a;}}if(!collector)continue;const denied=collector.team===s.team;if(!denied){m.score[collector.team]++;collector.captures=(collector.captures||0)+1;}m.events.push({type:denied?'kill-denied':'kill-confirmed',actor:collector.id,team:collector.team,starTeam:s.team,position:{x:s.x,y:s.y,z:s.z}});this.stars.splice(i,1);}
+  }else if(m.config.mode==='ctf'){
    for(const f of this.flags){if(f.state==='carried'){const carrier=m.actors.find(a=>a.id===f.carrier);if(carrier?.alive){f.x=carrier.body.x;f.y=carrier.body.y;f.z=carrier.body.z;}else if(carrier)this.onDeath(carrier);}
     if(f.state==='dropped'&&m.time>=f.returnAt){this.home(f);m.events.push({type:'flag-return',actor:-1,team:f.team});}
     // Friendly recovery has priority in a simultaneous touch.
@@ -36,7 +38,7 @@ export class Objectives{
   if(time<(b.nextObjective||0)&&b.goal)return true;b.nextObjective=time+.65;
   if(!b.carrying&&b.arsenal.slots[1].ammo+b.arsenal.slots[1].reserve<12){let supply=null,best=Infinity;for(const c of m.crates){const d=distance(b.body,c);if(c.available&&c.rifle&&d<best){best=d;supply=c;}}if(supply){b.state='REABASTECER';m.setGoal(b,supply);return true;}}
   let goal=null,role='OBJETIVO';
-  if(m.config.mode==='ctf'){const own=this.flags.find(f=>f.team===b.team),enemy=this.flags.find(f=>f.team!==b.team),defend=Math.floor((b.id-1)/2)%3===1||b.profile.name==='Defensivo';
+  if(m.config.mode==='confirmed'){let cost=Infinity;for(const s of this.stars){const d=distance(b.body,s)+(s.team===b.team?2:0);if(d<cost){cost=d;goal=s;role=s.team===b.team?'RECUPERAR ESTRELLA':'CONFIRMAR BAJA';}}if(!goal)return false;}else if(m.config.mode==='ctf'){const own=this.flags.find(f=>f.team===b.team),enemy=this.flags.find(f=>f.team!==b.team),defend=Math.floor((b.id-1)/2)%3===1||b.profile.name==='Defensivo';
    if(b.carrying){goal=own.state==='home'?own.home:own;role=own.state==='home'?'ENTREGAR BANDERA':'RECUPERAR BASE';}
    else if(own.state!=='home'&&(defend||distance(b.body,own)<17)){goal=own;role='RECUPERAR BANDERA';}
    else if(enemy.state==='carried'){const carrier=m.actors.find(a=>a.id===enemy.carrier);goal=carrier?{x:carrier.body.x+(b.id%2?2:-2),y:carrier.body.y,z:carrier.body.z+2}:own.home;role='ESCOLTAR';}
