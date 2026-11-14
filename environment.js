@@ -25,7 +25,7 @@ export const LAMPS=Object.freeze([
 // One static colour bake. Subdivision is restricted to large architectural faces;
 // detailed trim keeps its original triangle count. No runtime shadow maps.
 export function bakeNightGeometry(meshes,solids,lamps=LAMPS){
- const positions=[],colors=[],cache=new Map(),warm=new T.Color(0xffce89);
+ const positions=[],colors=[],ambientColors=[],lampColors=[],cache=new Map(),warm=new T.Color(0xffce89);
  const matrix=new T.Matrix4(),instance=new T.Matrix4(),a=new T.Vector3(),b=new T.Vector3(),c=new T.Vector3();
  const lightPoints=lamps.map(l=>({x:l.x+l.n[0]*.18,y:l.y+l.n[1]*.18,z:l.z+l.n[2]*.18,r:l.r}));
  let rays=0;
@@ -49,7 +49,7 @@ export function bakeNightGeometry(meshes,solids,lamps=LAMPS){
    else{const m=c.clone().add(a).multiplyScalar(.5);triangle(a,b,m,base,depth+1);triangle(m,b,c,base,depth+1);}return;
   }
   normal.normalize();const ambient=.27+.11*Math.max(0,normal.y)+.045*Math.max(0,-normal.x);
-  for(const v of [a,b,c]){positions.push(v.x,v.y,v.z);const glow=irradiance(v,normal);colors.push(base.r*(ambient+warm.r*glow),base.g*(ambient+warm.g*glow),base.b*(ambient+warm.b*glow));}
+  for(const v of [a,b,c]){positions.push(v.x,v.y,v.z);const glow=irradiance(v,normal);colors.push(base.r*(ambient+warm.r*glow),base.g*(ambient+warm.g*glow),base.b*(ambient+warm.b*glow));ambientColors.push(base.r*ambient,base.g*ambient,base.b*ambient);lampColors.push(base.r*warm.r*glow,base.g*warm.g*glow,base.b*warm.b*glow);}
  }
  for(const mesh of meshes){mesh.updateMatrixWorld(true);const p=mesh.geometry.attributes.position,idx=mesh.geometry.index,count=idx?idx.count:p.count;
   for(let k=0;k<(mesh.isInstancedMesh?mesh.count:1);k++){
@@ -57,11 +57,11 @@ export function bakeNightGeometry(meshes,solids,lamps=LAMPS){
    for(let j=0;j<count;j+=3){a.fromBufferAttribute(p,idx?idx.getX(j):j).applyMatrix4(matrix);b.fromBufferAttribute(p,idx?idx.getX(j+1):j+1).applyMatrix4(matrix);c.fromBufferAttribute(p,idx?idx.getX(j+2):j+2).applyMatrix4(matrix);triangle(a,b,c,mesh.material.color);}
   }
  }
- const geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.Float32BufferAttribute(positions,3));geometry.setAttribute('color',new T.Float32BufferAttribute(colors,3));geometry.computeBoundingSphere();geometry.userData={triangles:positions.length/9,lightSamples:cache.size,occlusionChecks:rays};return geometry;
+ const geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.Float32BufferAttribute(positions,3));geometry.setAttribute('color',new T.Float32BufferAttribute(colors,3));geometry.setAttribute('nightAmbient',new T.Float32BufferAttribute(ambientColors,3));geometry.setAttribute('nightLamp',new T.Float32BufferAttribute(lampColors,3));geometry.computeBoundingSphere();geometry.userData={triangles:positions.length/9,lightSamples:cache.size,occlusionChecks:rays};return geometry;
 }
 
 export class NightEnvironment{
- constructor(view){this.view=view;this.night=false;this.nightMesh=null;this.timer=0;this.pool=[];
+ constructor(view){this.view=view;this.night=false;this.nightMesh=null;this.timer=0;this.pool=[];this.alarmUniforms={uAlarmMix:{value:0},uAlarmPulse:{value:1}};this.warm=new T.Color(0xffd394);this.red=new T.Color(0xff180a);
   this.daySky=view.sky.geometry.attributes.color.array.slice();this.dayFog=view.scene.fog.color.clone();this.dayBodies=[...view.sky.children];
   this.savedLights=[...view.scene.children,...view.gunScene.children].filter(o=>o.isLight).map(light=>({light,color:light.color.clone(),ground:light.groundColor?.clone(),intensity:light.intensity}));
   this.lamps=view.level.lamps||LAMPS;this.buildFixtures();this.buildNightSky();
@@ -73,7 +73,7 @@ export class NightEnvironment{
   housing.computeBoundingSphere();emitters.computeBoundingSphere();scene.add(housing,emitters);
   // Only two nearby warm lights shade moving bodies/loot. Architecture is baked.
   // They have no shadow maps and are disabled entirely in daylight.
-  for(let i=0;i<2;i++){const light=new T.PointLight(0xffd496,0,16,1.5);light.castShadow=false;light.visible=false;scene.add(light);this.pool.push({light,index:-1,next:-1});}
+  for(let i=0;i<2;i++){const light=new T.PointLight(0xffd496,0,16,1.5);light.castShadow=false;light.visible=false;scene.add(light);this.pool.push({light,index:-1,next:-1,energy:0});}
  }
  buildNightSky(){this.starsAndMoon=new T.Group();this.starsAndMoon.visible=false;this.view.sky.add(this.starsAndMoon);
   const rng=randomStream(0x9a17),positions=[],colors=[],moonDir=new T.Vector3(-.55,.62,-.56).normalize();
@@ -89,22 +89,22 @@ export class NightEnvironment{
   this.moon=new T.Mesh(geo,new T.MeshBasicMaterial({color:0xf2edce,side:T.DoubleSide,transparent:true,depthWrite:false,fog:false}));this.moon.position.copy(moonDir).multiplyScalar(130);this.moon.lookAt(0,0,0);this.moon.rotateZ(-.20);this.moon.renderOrder=-7;this.starsAndMoon.add(this.moon);
  }
  setMode(mode){const night=mode==='night';if(night===this.night)return;this.night=night;const v=this.view;
-  if(night&&!this.nightMesh){const geo=bakeNightGeometry(v.architecture,v.level.solids,this.lamps);this.nightMesh=new T.Mesh(geo,new T.MeshBasicMaterial({vertexColors:true}));v.scene.add(this.nightMesh);}
+  if(night&&!this.nightMesh){const geo=bakeNightGeometry(v.architecture,v.level.solids,this.lamps);this.nightMesh=new T.Mesh(geo,new T.MeshBasicMaterial({vertexColors:true}));this.nightMesh.material.onBeforeCompile=shader=>{Object.assign(shader.uniforms,this.alarmUniforms);shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nattribute vec3 nightAmbient;attribute vec3 nightLamp;uniform float uAlarmMix;uniform float uAlarmPulse;').replace('#include <color_vertex>','#include <color_vertex>\nvColor.rgb=mix(nightAmbient+nightLamp,nightAmbient+vec3(nightLamp.r*1.65,nightLamp.g*.035,nightLamp.b*.012)*uAlarmPulse,uAlarmMix);');};this.nightMesh.material.customProgramCacheKey=()=>'night-alarm-v1';v.scene.add(this.nightMesh);}
   for(const mesh of v.architecture)mesh.visible=!night;if(this.nightMesh)this.nightMesh.visible=night;
   const attribute=v.sky.geometry.attributes.color,pos=v.sky.geometry.attributes.position;
   if(night){const horizon=new T.Color(0x171e2a),top=new T.Color(0x02050c),color=new T.Color();for(let i=0;i<pos.count;i++){color.copy(horizon).lerp(top,Math.pow(clamp(pos.getY(i)/145,0,1),.55));attribute.setXYZ(i,color.r,color.g,color.b);}v.scene.fog.color.copy(horizon);}
   else{attribute.array.set(this.daySky);v.scene.fog.color.copy(this.dayFog);}attribute.needsUpdate=true;v.renderer?.setClearColor(v.scene.fog.color);
   this.dayBodies.forEach(o=>o.visible=!night);this.starsAndMoon.visible=night;this.emitMaterial.color.set(night?0xffd394:0x69736b);
   for(const item of this.savedLights){const {light}=item;light.color.copy(night?new T.Color(0xffdeb1):item.color);if(light.groundColor)light.groundColor.copy(night?new T.Color(0x4a4541):item.ground);light.intensity=night?(light.isHemisphereLight?1.2:.65):item.intensity;}
-  for(const slot of this.pool){slot.light.visible=night;slot.light.intensity=0;slot.index=slot.next=-1;}this.timer=0;
+  for(const slot of this.pool){slot.light.visible=night;slot.light.intensity=0;slot.energy=0;slot.index=slot.next=-1;}this.timer=0;
  }
- update(dt,player){if(!this.night)return;this.timer-=dt;
+ update(dt,player){if(!this.night)return;const n=this.view.match?.nuclear,active=n?.active,age=active?n.age:0,alarm=active?clamp(age/.7,0,1):0,fade=active?clamp((22-age)/2,0,1):1,pulse=active?(.08+.92*(.5-.5*Math.cos(age*Math.PI/2)))*fade:1;this.alarmUniforms.uAlarmMix.value=alarm;this.alarmUniforms.uAlarmPulse.value=pulse;this.emitMaterial.color.copy(this.warm).lerp(this.red,alarm).multiplyScalar(active?pulse:1);this.timer-=dt;
   if(this.timer<=0){this.timer=.25;let first=-1,second=-1,d1=Infinity,d2=Infinity;
    for(let i=0;i<this.lamps.length;i++){const l=this.lamps[i],d=Math.hypot(player.x-l.x,player.y+1-l.y,player.z-l.z);if(d<d1){d2=d1;second=first;d1=d;first=i;}else if(d<d2){d2=d;second=i;}}
    const selected=[first,second];for(const slot of this.pool)if(selected.includes(slot.next))selected.splice(selected.indexOf(slot.next),1);else slot.next=-1;for(const slot of this.pool)if(slot.next<0)slot.next=selected.shift()??-1;
   }
-  for(const slot of this.pool){const light=slot.light;if(slot.index!==slot.next){light.intensity=Math.max(0,light.intensity-dt*45);if(light.intensity<.01){slot.index=slot.next;if(slot.index>=0){const l=this.lamps[slot.index];light.position.set(l.x+l.n[0]*.18,l.y+l.n[1]*.18,l.z+l.n[2]*.18);light.distance=l.r;}}}
-   else if(slot.index>=0)light.intensity=Math.min(14,light.intensity+dt*35);
+  for(const slot of this.pool){const light=slot.light;if(slot.index!==slot.next){slot.energy=Math.max(0,slot.energy-dt*45);if(slot.energy<.01){slot.index=slot.next;if(slot.index>=0){const l=this.lamps[slot.index];light.position.set(l.x+l.n[0]*.18,l.y+l.n[1]*.18,l.z+l.n[2]*.18);light.distance=l.r;}}}
+   else if(slot.index>=0)slot.energy=Math.min(14,slot.energy+dt*35);light.color.copy(this.warm).lerp(this.red,alarm);light.intensity=slot.energy*pulse;
   }
  }
 }

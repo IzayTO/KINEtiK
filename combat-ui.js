@@ -34,7 +34,7 @@ export class CombatUI{
   for(const [i,r]of this.rows.entries()){const index=entries.findIndex(e=>e.sequence===r.sequence),age=time-r.at;r.el.hidden=index<0&&!editing;r.el.style.top=((index<0?i:index)*20)+'px';r.el.style.opacity=editing?'0.8':String(Math.min(clamp(age/.18,0,1),clamp((3.24-age)/.24,0,1)));r.el.style.transform=`translateX(${editing?0:Math.max(0,1-age/.22)*12}px)`;
    if(editing&&index<0){r.killer.textContent='AZUL';r.killer.className='name-blue';r.phrase.textContent=' ganó el duelo contra ';r.victim.textContent='ROJO';r.victim.className='name-red';}}
  }
- updateDeath(time,editing){const a=this.match.player,visible=!$('hud').hidden&&!editing,dead=!a.alive&&this.match.running&&!this.match.ended;
+ updateDeath(time,editing){if(this.match.nuclear?.impacted){this.wasDead=false;this.deathStamp=null;$('death-feedback').hidden=true;$('death-black').style.opacity=$('death-red').style.opacity='0';document.body.classList.remove('player-dead');return;}const a=this.match.player,visible=!$('hud').hidden&&!editing,dead=!a.alive&&this.match.running&&!this.match.ended;
   if(dead&&this.deathStamp!==a.deathTime){this.deathStamp=a.deathTime;$('death-title').textContent=this.deathPhrases.next();}
   if(this.wasDead&&!dead)this.deathExit=time;this.wasDead=dead;
   const exit=dead?1:clamp(1-(time-this.deathExit)/.28,0,1),show=visible&&(dead||exit>0),s=deathState(Math.max(0,time-(this.deathStamp??time)));

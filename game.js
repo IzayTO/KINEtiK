@@ -1,3 +1,4 @@
+import {OperationUI,medalIcon} from './operation-ui.js';
 import {SupportUI} from './support-ui.js';
 import {GameInterface,quickConfig} from './interface.js';
 import {createAirport} from './airport.js';
@@ -41,7 +42,7 @@ let fps=60,frameCount=0,frameSum=0,hudTime=0,hitTimer=0,hits=0,shots=0,playTime=
 const audio=new AudioFX(params),preferences=loadPreferences(),arsenal=new Arsenal();
 // Explicit diagnostic mode does not pretend to render a game. Normal startup always requires WebGL.
 const diagnostic=new URLSearchParams(location.search).has('qa');
-let editor,minimap,reticle,refreshV2,assistCache=null,assistTime=0,match,aimSupport,combatUI,fieldHUD,gameUI,supportUI;
+let editor,minimap,reticle,refreshV2,assistCache=null,assistTime=0,match,aimSupport,combatUI,fieldHUD,gameUI,supportUI,operationUI;
 let matchConfig={...MATCH_DEFAULTS};try{const saved=JSON.parse(localStorage.getItem('kinetic-match-v3'));if(saved)Object.assign(matchConfig,saved);}catch{}
 audio.preferences=preferences;arsenal.autoReload=preferences.autoReload;
 const events=[],metrics={physicsMS:0,renderMS:0,hudMS:0,minimapMS:0,physicsSteps:0};
@@ -49,6 +50,7 @@ const events=[],metrics={physicsMS:0,renderMS:0,hudMS:0,minimapMS:0,physicsSteps
 function toast(message){$('toast').textContent=message;$('toast').style.opacity='1';clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').style.opacity='0',2200);}
 function tab(name){for(const button of document.querySelectorAll('[data-tab]'))button.classList.toggle('active',button.dataset.tab===name);for(const id of ['settings','map','controls','reticle','match','audio'])$('tab-'+id).hidden=id!==name;if(name==='map')drawMap($('pause-map'),true);}
 function pause(settings=false){
+  if(match?.nuclear.impacted)return;
   if(supportUI?.opened){supportUI.close();return;}
   if(editor?.editing){editor.close(false);return;}if(!started){openOptions();return;}playing=false;input.active=false;input.clear();clock.reset();audio.suspend();
   $('resume').hidden=false;$('pause').hidden=false;$('touch-controls').hidden=true;$('hud').hidden=true;
@@ -73,7 +75,7 @@ async function start(){
   // Fullscreen is optional. Safari can play directly in the normal viewport.
   if(!diagnostic&&input.touchMode&&!document.fullscreenElement&&document.documentElement.requestFullscreen){try{await document.documentElement.requestFullscreen();}catch{}}
 }
-function reset(){if(match?.staging)return;player.reset();input.clear();input.yaw=level.spawn.yaw;input.pitch=0;view.eye=1.67;view.landing=0;view.recoil=0;clock.reset();toast('Punto de inicio restablecido');}
+function reset(){if(match?.staging||match?.nuclear.restricted)return;player.reset();input.clear();input.yaw=level.spawn.yaw;input.pitch=0;view.eye=1.67;view.landing=0;view.recoil=0;clock.reset();toast('Punto de inicio restablecido');}
 function drawMap(container,withPlayer){
   if(!level)return;let shapes='';
   for(const v of level.visuals){
@@ -111,15 +113,17 @@ function tick(now){
     playTime+=dt;input.speed=player.speed;input.airborne=!player.grounded;
     alpha=clock.advance(dt,h=>{
       input.remoteMode=match.remote.engaged;input.throwableMode=!!match.player.held&&match.player.held!=='rocket';input.actionADS=(arsenal.selected!==0||match.player.held==='rocket')&&!input.throwableMode;
-      const wasSlide=player.sliding,wasSpeed=player.speed,sample=supportUI.opened?{x:0,z:0,yaw:input.yaw,pitch:input.pitch,actions:[],fire:false,aim:false}:input.sample(true);
+      const wasSlide=player.sliding,wasSpeed=player.speed,sample=supportUI.opened?{x:0,z:0,yaw:input.yaw,pitch:input.pitch,actions:[],fire:false,aim:false}:input.sample(true);match.nuclear.filterInput(sample);
+      if(match.nuclear.impacted){match.player.yaw=input.yaw;match.player.pitch=input.pitch;match.step(h);steps++;return;}
       if(match.staging){match.player.yaw=input.yaw;match.player.pitch=input.pitch;player.previous={x:player.x,y:player.y,z:player.z};match.step(h);if(!match.staging){input.clear();footDistance=0;}steps++;return;}
       const aimOrigin={x:player.x,y:player.y+view.eye,z:player.z};
-      [input.yaw,input.pitch]=aimSupport.track(h,aimOrigin,input.yaw,input.pitch,sample.aim&&!match.remote.engaged&&!match.player.held&&!match.player.throwAction&&arsenal.selected!==0&&!arsenal.reload,input.touchMode||preferences.assistMouse);
+      [input.yaw,input.pitch]=aimSupport.track(h,aimOrigin,input.yaw,input.pitch,sample.aim&&!match.nuclear.restricted&&!match.remote.engaged&&!match.player.held&&!match.player.throwAction&&arsenal.selected!==0&&!arsenal.reload,input.touchMode||preferences.assistMouse);
       sample.yaw=input.yaw;sample.pitch=input.pitch;
       if(!match.remote.engaged){match.player.yaw=input.yaw;match.player.pitch=input.pitch;}
       if(match.player.alive)player.step(h,match.remote.engaged?{yaw:match.player.yaw}:sample);steps++;
       for(const action of (match.player.alive&&!match.remote.engaged?sample.actions:[])){
-        if(action==='airstrike'){if(!supportUI.open())toast(match.support.flight?'Apoyo aéreo ya en curso':'Consigue 20 bajas para desbloquear apoyo aéreo');sample.fire=sample.fireStart=sample.aim=false;sample.x=sample.z=0;sample.fireRelease=null;if(supportUI.opened)break;}
+        if(action==='atomic'){if(!match.nuclear.activate())toast('Requiere 41 bajas y usar RC, apoyo aéreo y R-12');sample.fire=sample.fireStart=false;}
+        else if(action==='airstrike'){if(!supportUI.open())toast(match.support.flight?'Apoyo aéreo ya en curso':'Consigue 20 bajas para desbloquear apoyo aéreo');sample.fire=sample.fireStart=sample.aim=false;sample.x=sample.z=0;sample.fireRelease=null;if(supportUI.opened)break;}
         else if(action==='rc'){if(match.remote.deploy(input.yaw,input.pitch)){gameUI.prepareRemote();input.clear();input.remoteMode=true;input.pitch=match.remote.pitch;sample.pitch=input.pitch;sample.fire=sample.fireStart=false;sample.jump=false;}else toast(match.player.rcCharges?'Busca espacio en el suelo para desplegar el RC':'Consigue 10 bajas para desbloquear un RC');}
         else if(action.startsWith('slot')){if(match.player.throwAction)continue;match.player.held=null;input.throwableMode=false;match.supplies.cancel(match.player);if(arsenal.select(+action.slice(4)))audio.sound('switch');}
         else if(action.startsWith('equip-')){if(match.ordnance.select(match.player,action.slice(6))){input.aimToggle=false;input.aim=false;input.throwableMode=match.player.held!=='rocket';input.throwArmed=false;input.releaseQueued=null;audio.sound('switch');}}
@@ -132,7 +136,7 @@ function tick(now){
         else if(action==='ping')events.push({type:'ping'});
       }
       const remote=match.remote.engaged;if(remote)match.remote.control(sample);
-      if(match.player.alive){
+      if(match.player.alive&&!match.nuclear.restricted){
         const manual=!remote&&(sample.fire||sample.fireStart);if(manual)match.supplies.cancel(match.player);
         if(!remote)combatUI.step(h,sample);
         aimOrigin.x=player.x;aimOrigin.y=player.y+view.eye;aimOrigin.z=player.z;
@@ -154,7 +158,7 @@ function tick(now){
       if(player.grounded&&!player.sliding&&player.speed>1.5){footDistance+=player.speed*h;if(footDistance>2.6){footDistance=0;audio.sound(player.speed>9?'sprint':'step');if(player.speed>9)match.hear(match.player,13,'sprint');}}}
     });
     metrics.physicsMS=performance.now()-physicsStart;metrics.physicsSteps=steps;
-    audio.setListener(match.remote.engaged?match.remote.body:player,input.yaw);audio.motor(match.remote.ready,match.remote.body.speed,match.remote.command.sprint);audio.aircraft(match.support.flight);const sampled=match.staging?{yaw:input.yaw,pitch:input.pitch,x:0,z:0,aim:false,fire:false}:input.sample(false);view.update(dt,player,sampled,alpha,arsenal);
+    audio.setListener(match.remote.engaged?match.remote.body:player,input.yaw);audio.motor(match.remote.ready,match.remote.body.speed,match.remote.command.sprint);audio.aircraft(match.support.flight);const sampled=match.staging?{yaw:input.yaw,pitch:input.pitch,x:0,z:0,aim:false,fire:false}:input.sample(false);match.nuclear.filterInput(sampled);view.update(dt,player,sampled,alpha,arsenal);
     for(const event of events){
       if(event.type==='ping'){if(view.placePing()){const enemy=match.lineTarget(match.player,view.camera.position,view.dir,150).actor,p=enemy&&match.enemy(match.player,enemy)?{x:enemy.body.x,y:enemy.body.y+enemy.body.height+.15,z:enemy.body.z}:view.pingPosition;match.support.playerPing(p,performance.now()/1000);view.pingMesh.visible=false;}else toast('No hay una superficie válida en esa dirección');continue;}
       if(event.type==='empty'){toast('Sin munición · Recarga');continue;}
@@ -175,7 +179,7 @@ function tick(now){
   }else if(!started&&!editor?.editing){
     view.update(dt,player,{yaw:0,pitch:0.01,x:0},1);
   }
-  combatUI.frame(dt,editor.editing);fieldHUD.frame(dt,editor.editing);gameUI.frame(dt,editor.editing,playing);supportUI.frame(dt,editor.editing,playing);minimap.updateRadar(match,player,input.yaw,preferences.mapRotate,dt);
+  combatUI.frame(dt,editor.editing);fieldHUD.frame(dt,editor.editing);gameUI.frame(dt,editor.editing,playing);supportUI.frame(dt,editor.editing,playing);operationUI.frame(dt,editor.editing,playing);audio.atomic(playing?match.nuclear:null);minimap.updateRadar(match,player,input.yaw,preferences.mapRotate,dt);
   // Reused squad labels are projected every frame by SupportUI.
   // Render while paused at 30 Hz, reducing battery use without hiding the environment.
   if(!editor.editing&&(playing||frameCount%2===0)){const renderStart=performance.now();view.render();metrics.renderMS=diagnostic?0:performance.now()-renderStart;}
@@ -203,7 +207,7 @@ function tick(now){
 }
 function makeLevel(id){return id==='airport'?createAirport():refineLevel(createLevel());}
 function updateMapIdentity(){document.querySelector('.location b').textContent=level.name;document.querySelector('.map-caption>b').textContent=level.name;document.querySelector('.map-caption>span').textContent=level.id==='airport'?'TERMINAL / PLATAFORMA / CARGA':'COMPLEJO DE MANTENIMIENTO';document.querySelector('.intro-stats b').textContent=level.width+' × '+level.depth;document.querySelector('.map-description h3').textContent=level.name;document.querySelector('.map-description>p').textContent=level.id==='airport'?'Terminal transitable, pasarela, hangar, aeronaves y carga. Seis sectores conectados.':'Un complejo compacto con rutas que se cruzan a distintas alturas.';document.querySelector('.map-description ol').hidden=level.id==='airport';}
-function selectLevel(id){if((level.id||'nodo09')===id)return;const renderer=view.renderer;view.dispose();level=makeLevel(id);player.world=new CollisionWorld(level.solids);player.spawn={...level.spawn};player.reset();match=new Match(player.world,player,arsenal,params,level);view=new V3World(canvas,level,params,{render:!diagnostic,renderer});view.preferences=preferences;view.resize(innerWidth,innerHeight,true);aimSupport=new AimSupport(match,preferences);Object.assign(combatUI,{match,view});Object.assign(fieldHUD,{match,view});Object.assign(gameUI,{match,view});Object.assign(supportUI,{match,view});minimap.setLevel(level);updateMapIdentity();drawMap($('welcome-map'),false);}
+function selectLevel(id){if((level.id||'nodo09')===id)return;const renderer=view.renderer;view.dispose();level=makeLevel(id);player.world=new CollisionWorld(level.solids);player.spawn={...level.spawn};player.reset();match=new Match(player.world,player,arsenal,params,level);view=new V3World(canvas,level,params,{render:!diagnostic,renderer});view.preferences=preferences;view.resize(innerWidth,innerHeight,true);aimSupport=new AimSupport(match,preferences);Object.assign(combatUI,{match,view});Object.assign(fieldHUD,{match,view});Object.assign(gameUI,{match,view});Object.assign(supportUI,{match,view});operationUI.match=match;minimap.setLevel(level);updateMapIdentity();drawMap($('welcome-map'),false);}
 function setupConfigTransfer(){
  const snapshot=()=>configurationSnapshot(params,preferences,editor.exportLayouts(),matchConfig),status=$('configuration-status');
  $('export-configuration').onclick=()=>{downloadConfiguration(snapshot());status.textContent='Configuración exportada: ajustes y ambos perfiles del HUD.';};
@@ -211,12 +215,14 @@ function setupConfigTransfer(){
  $('configuration-file').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;status.textContent='Cargando configuración…';try{if(file.size>262144)throw new Error('El archivo de ajustes es demasiado grande.');const data=parseConfiguration(JSON.parse(await file.text()),snapshot(),controls);Object.assign(params,data.settings);Object.assign(preferences,data.preferences);editor.store.layouts=data.hud;editor.store.draft=null;editor.store.save();editor.apply();matchConfig=data.match;saveSettings();savePreferences(preferences);localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));for(const [key,val]of Object.entries(matchConfig)){const el=$('match-'+key);if(el){if(el.tagName==='SELECT'&&![...el.options].some(o=>o.value===String(val))){const option=document.createElement('option');option.value=String(val);option.textContent=String(val);el.append(option);}el.value=String(val);}}$('map-select').value=matchConfig.map;$('match-mode').onchange();$('match-bots').oninput();arsenal.autoReload=preferences.autoReload;refreshSettings();refreshV2();view.resize(innerWidth,innerHeight,true);status.textContent='Configuración personalizada aplicada. El mapa elegido se usa en la siguiente partida.';toast('Configuración personalizada aplicada');}catch(error){status.textContent='No se pudo importar: '+error.message;}finally{e.target.value='';}};
 }
 function beginSimulation(config=matchConfig){
- supportUI?.reset();selectLevel(config.map||'nodo09');matchConfig={...matchConfig,...config};try{localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));}catch{}match.start(matchConfig);aimSupport.reset();combatUI.reset();fieldHUD.reset();gameUI.reset();view.attachMatch(match);player.previous={x:player.x,y:player.y,z:player.z};input.yaw=match.player.yaw;input.pitch=0;input.clear();clock.reset();events.length=0;arsenal.autoReload=preferences.autoReload;view.eye=1.67;view.landing=0;playTime=0;hits=shots=0;$('hits').textContent='00';$('match-result').hidden=true;$('death-feedback').hidden=true;updateMatchHUD();
+ supportUI?.reset();selectLevel(config.map||'nodo09');matchConfig={...matchConfig,...config};try{localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));}catch{}match.start(matchConfig);aimSupport.reset();combatUI.reset();fieldHUD.reset();gameUI.reset();operationUI.reset();view.attachMatch(match);player.previous={x:player.x,y:player.y,z:player.z};input.yaw=match.player.yaw;input.pitch=0;input.clear();clock.reset();events.length=0;arsenal.autoReload=preferences.autoReload;view.eye=1.67;view.landing=0;playTime=0;hits=shots=0;$('hits').textContent='00';$('match-result').hidden=true;$('death-feedback').hidden=true;updateMatchHUD();
 }
 function registerHits(result){if(result.length){hits+=result.length;hitTimer=.12;audio.sound('hit');$('hits').textContent=String(hits).padStart(2,'0');}}
 function processMatchEvents(){
  for(const e of match.events){
-  combatUI.onEvent(e);fieldHUD.onEvent(e);gameUI.onEvent(e);
+  match.awards.objective(e);operationUI.onEvent(e);combatUI.onEvent(e);fieldHUD.onEvent(e);gameUI.onEvent(e);
+  if(e.type==='atomic-blackout'){supportUI.close(false);input.active=playing;input.clear();}
+  if(e.type==='atomic-pulse')audio.atomicStage=e.index;
   const local=e.actor===0,pos=['ping','ping-danger'].includes(e.type)?null:local&&!['explosion','rocket-explosion','airstrike-impact','glass','gas','fire-loop'].includes(e.type)?null:e.position;
   if(e.type==='rocket-shot'&&local){view.recoil=Math.min(2,view.recoil+1.4*params.recoil);shots++;}
   if(e.type==='trace'){view.showTrace(e);if(Math.hypot(e.to.x-player.x,e.to.y-player.y,e.to.z-player.z)<12)audio.sound('hit',e.to);continue;}
@@ -236,8 +242,8 @@ function updateMatchHUD(){
 }
 function openMatchMenu(){supportUI?.close(false);playing=false;input.active=false;input.clear();clock.reset();if(document.pointerLockElement)document.exitPointerLock();$('welcome').hidden=true;$('hud').hidden=true;$('touch-controls').hidden=true;$('pause').hidden=false;$('match-result').hidden=true;$('resume').hidden=!started;tab('match');}
 function openOptions(){supportUI?.close(false);playing=false;input.active=false;input.clear();clock.reset();audio.suspend();if(document.pointerLockElement)document.exitPointerLock();$('welcome').hidden=true;$('hud').hidden=true;$('touch-controls').hidden=true;$('pause').hidden=false;$('resume').hidden=!started;tab('settings');}
-function home(){supportUI?.reset();playing=false;started=false;match.running=false;match.remote.reset();gameUI.reset();gameUI.releaseCapture();input.active=false;input.clear();clock.reset();audio.suspend();if(document.pointerLockElement)document.exitPointerLock();$('pause').hidden=true;$('welcome').hidden=false;$('hud').hidden=true;$('touch-controls').hidden=true;$('match-result').hidden=true;}
-function showResult(){const r=match.result;$('result-title').textContent='GANADOR · '+r.winner;const table=document.createElement('table'),head=document.createElement('tr');for(const name of (['ctf','confirmed'].includes(r.mode)?['PARTICIPANTE','BAJAS','CAÍDAS',r.mode==='confirmed'?'CONFIRMADAS':'CAPTURAS']:['PARTICIPANTE','BAJAS','CAÍDAS'])){const th=document.createElement('th');th.textContent=name;head.append(th);}table.append(head);for(const a of r.ranked){const row=document.createElement('tr');for(const value of (['ctf','confirmed'].includes(r.mode)?[a.name,a.kills,a.deaths,a.captures]:[a.name,a.kills,a.deaths])){const td=document.createElement('td');td.textContent=value;if(value===a.name)td.className='name-'+a.team;row.append(td);}table.append(row);}$('result-scores').replaceChildren(table);if(['ctf','domination','confirmed'].includes(r.mode)){const score=document.createElement('p');score.textContent=`AZUL ${r.score.blue} · ROJO ${r.score.red} / ${r.mode==='ctf'?'CAPTURAS':'PUNTOS'}`;$('result-scores').prepend(score);}$('match-result').hidden=false;}
+function home(){supportUI?.reset();match.nuclear.reset();operationUI.reset();playing=false;started=false;match.running=false;match.remote.reset();gameUI.reset();gameUI.releaseCapture();input.active=false;input.clear();clock.reset();audio.suspend();if(document.pointerLockElement)document.exitPointerLock();$('pause').hidden=true;$('welcome').hidden=false;$('hud').hidden=true;$('touch-controls').hidden=true;$('match-result').hidden=true;}
+function showResult(){const r=match.result;$('result-title').textContent=(r.reason==='atomic'?'FIN ATÓMICO · ':'GANADOR · ')+r.winner;const medals=$('result-medals');medals.replaceChildren();for(const medal of r.medals||[]){const card=document.createElement('article');card.innerHTML=medalIcon(medal.icon);const title=document.createElement('b'),detail=document.createElement('small');title.textContent=medal.title;detail.textContent=medal.detail;card.append(title,detail);medals.append(card);}const table=document.createElement('table'),head=document.createElement('tr');for(const name of (['ctf','confirmed'].includes(r.mode)?['PARTICIPANTE','BAJAS','CAÍDAS',r.mode==='confirmed'?'CONFIRMADAS':'CAPTURAS']:['PARTICIPANTE','BAJAS','CAÍDAS'])){const th=document.createElement('th');th.textContent=name;head.append(th);}table.append(head);for(const a of r.ranked){const row=document.createElement('tr');for(const value of (['ctf','confirmed'].includes(r.mode)?[a.name,a.kills,a.deaths,a.captures]:[a.name,a.kills,a.deaths])){const td=document.createElement('td');td.textContent=value;if(value===a.name)td.className='name-'+a.team;row.append(td);}table.append(row);}$('result-scores').replaceChildren(table);if(['ctf','domination','confirmed'].includes(r.mode)){const score=document.createElement('p');score.textContent=`AZUL ${r.score.blue} · ROJO ${r.score.red} / ${r.mode==='ctf'?'CAPTURAS':'PUNTOS'}`;$('result-scores').prepend(score);}$('match-result').hidden=false;}
 function setupMatchUI(){
  const fields=['map','mode','bots','difficulty','team','minutes','limit','quality','crateSeconds','environment','captureLimit','dominationLimit'];for(const key of fields){const el=$('match-'+key);el.value=String(matchConfig[key]);if(!el.value)el.value=String(MATCH_DEFAULTS[key]);}
  const refresh=()=>{const mode=$('match-mode').value;$('elimination-limit-field').firstChild.textContent=mode==='confirmed'?'Límite de confirmaciones':'Límite de eliminaciones';$('capture-limit-field').hidden=mode!=='ctf';$('domination-limit-field').hidden=mode!=='domination';$('elimination-limit-field').hidden=['ctf','domination'].includes(mode);$('match-team').disabled=$('match-mode').value==='ffa';const n=+$('match-bots').value;$('bot-count-label').textContent=n;$('bot-warning').textContent=n>=12?n+' bots · Mayor carga de CPU. Reduce la cantidad o usa IA adaptativa si baja la fluidez.':n+' bots · Perfiles y percepción activos.';};$('match-bots').oninput=refresh;$('match-mode').onchange=()=>{refresh();for(const b of document.querySelectorAll('[data-pick-mode]'))b.classList.toggle('selected',b.dataset.pickMode===$('match-mode').value);};refresh();
@@ -253,10 +259,10 @@ try{
   level=makeLevel(matchConfig.map);player=new Player(new CollisionWorld(level.solids),params,level.spawn);clock=new FixedClock();
   match=new Match(player.world,player,arsenal,params,level);view=new V3World(canvas,level,params,{render:!diagnostic});input=new Input(canvas,params,pause,reset);
   view.preferences=preferences;aimSupport=new AimSupport(match,preferences);input.onLook=(dx,dy)=>aimSupport.manual(dx,dy);
-  input.preferences=preferences;input.onAssist=(yaw,pitch,dyaw,dpitch)=>assistDelta(yaw,pitch,dyaw,dpitch,view.confirmAssist(assistCache),preferences);
+  input.preferences=preferences;input.onAssist=(yaw,pitch,dyaw,dpitch)=>match.nuclear.restricted?[dyaw,dpitch]:assistDelta(yaw,pitch,dyaw,dpitch,view.confirmAssist(assistCache),preferences);
   editor=new HUDEditor({touch:input.touchMode,onClose:({save,persisted})=>{gameUI.releaseCapture();input.clear();clock.reset();$('pause').hidden=false;$('touch-controls').hidden=true;$('hud').hidden=true;tab('controls');if(save)toast(persisted?'Distribución guardada':'Aplicada en esta sesión; almacenamiento no disponible');}});
-  combatUI=new CombatUI(match,view,input,preferences,()=>playing&&!editor.editing&&!match.staging&&match.player.alive&&!match.remote.engaged&&!supportUI?.opened,toast);
-  fieldHUD=new FieldHUD(match,view,input);gameUI=new GameInterface(view,match,input);
+  combatUI=new CombatUI(match,view,input,preferences,()=>playing&&!editor.editing&&!match.staging&&!match.nuclear.restricted&&match.player.alive&&!match.remote.engaged&&!supportUI?.opened,toast);
+  fieldHUD=new FieldHUD(match,view,input);gameUI=new GameInterface(view,match,input);operationUI=new OperationUI(match,input);
   minimap=new Minimap($('minimap-canvas'),level);supportUI=new SupportUI(match,view,input,minimap,()=>playing,()=>{audio.unlock();Promise.resolve(audio.ctx?.resume()).then(()=>processMatchEvents());});reticle=new Reticle($('reticle'),preferences);refreshV2=setupV2Settings(preferences,()=>reticle.update(0,view.camera.fov,innerHeight));
   $('customize-hud').onclick=()=>{gameUI.capture();playing=false;input.active=false;input.clear();clock.reset();$('pause').hidden=true;$('hud').hidden=false;$('touch-controls').hidden=false;editor.begin();};
   $('reset-targets').onclick=()=>{beginSimulation();toast('Partida reiniciada');};
@@ -278,7 +284,7 @@ try{
   for(const b of document.querySelectorAll('[data-tab]'))b.addEventListener('click',()=>tab(b.dataset.tab));
   lastTime=performance.now();requestAnimationFrame(tick);
   // Read-only diagnostics are useful for reproducible desktop QA and user reports.
-  window.kinetic={snapshot:()=>({playing,position:{x:player.x,y:player.y,z:player.z},velocity:{x:player.vx,y:player.vy,z:player.vz},speed:player.speed,state:player.state,grounded:player.grounded,height:player.height,version:'3-airport-operations',match:match.snapshot(),health:match.player.health,shield:match.player.shield,reserve:arsenal.reserve,autoReload:arsenal.autoReload,diagnostic,editing:editor.editing,yaw:input.yaw,pitch:input.pitch,weapon:arsenal.weapon.id,ammo:arsenal.ammo,reloading:!!arsenal.reload,mode:arsenal.mode,preferences:{...preferences},metrics:{...metrics},horizontalFov:params.hFov,verticalFov:view.camera.fov,aspect:view.camera.aspect,fps,drawCalls:view.stats.calls,triangles:view.stats.triangles,shots,hits,params:{...params}})};
+  window.kinetic={snapshot:()=>({playing,position:{x:player.x,y:player.y,z:player.z},velocity:{x:player.vx,y:player.vy,z:player.vz},speed:player.speed,state:player.state,grounded:player.grounded,height:player.height,version:'3-atomic-medals',match:match.snapshot(),health:match.player.health,shield:match.player.shield,reserve:arsenal.reserve,autoReload:arsenal.autoReload,diagnostic,editing:editor.editing,yaw:input.yaw,pitch:input.pitch,weapon:arsenal.weapon.id,ammo:arsenal.ammo,reloading:!!arsenal.reload,mode:arsenal.mode,preferences:{...preferences},metrics:{...metrics},horizontalFov:params.hFov,verticalFov:view.camera.fov,aspect:view.camera.aspect,fps,drawCalls:view.stats.calls,triangles:view.stats.triangles,shots,hits,params:{...params}})};
   if(diagnostic){
     const advance=(count=1)=>{cancelAnimationFrame(frame);for(let i=0;i<count;i++){const now=performance.now();lastTime=now-1000/60;tick(now);cancelAnimationFrame(frame);}frame=requestAnimationFrame(tick);};
     const qa={advance,player,input,view,arsenal,editor,preferences,minimap,reticle,pause,start,tab,match,beginSimulation,combatUI,aimSupport};window.kineticQA=qa;

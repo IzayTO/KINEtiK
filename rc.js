@@ -9,9 +9,9 @@ export class RemoteCar{
  get engaged(){return this.state!=='idle';}
  get ready(){return this.active&&this.match.time-this.born>=RC_CONNECT_SECONDS;}
  get active(){return this.state==='drive';}
- deploy(yaw,pitch){const m=this.match,a=m.player,p=a.body;if(m.staging||this.engaged||!a.alive||!a.rcCharges||a.throwAction||!p.grounded||!m.running||m.ended)return false;
+ deploy(yaw,pitch){const m=this.match,a=m.player,p=a.body;if(m.nuclear?.restricted||m.staging||this.engaged||!a.alive||!a.rcCharges||a.throwAction||!p.grounded||!m.running||m.ended)return false;
   let spot=null;for(const angle of [0,.65,-.65,1.25,-1.25,Math.PI]){const x=p.x-Math.sin(yaw+angle)*.9,z=p.z-Math.cos(yaw+angle)*.9,f=m.world.support(x,p.y,z,.25,.6);if(f&&m.world.clear(x,f.y,z,.36)&&obstruction(m.world.colliders,{x:p.x,y:p.y+.25,z:p.z},{x,y:f.y+.25,z})>.999){spot={x,y:f.y,z};break;}}
-  if(!spot)return false;a.rcCharges--;m.supplies.cancel(a);a.arsenal.reload=null;a.held=null;a.spawnUntil=Math.min(a.spawnUntil,m.time);this.body.reset(spot);this.body.height=.36;this.savedYaw=a.yaw;this.savedPitch=a.pitch;p.vx=p.vz=0;p.sliding=false;this.yaw=yaw;this.pitch=-.06;this.born=m.time;this.state='drive';this.command={};this.nextMotor=m.time;this.reason='ENLACE ESTABLE';m.events.push({type:'rc-start',actor:0,position:spot});return true;
+  if(!spot)return false;m.nuclear?.recordUse('rc',a);a.rcCharges--;m.supplies.cancel(a);a.arsenal.reload=null;a.held=null;a.spawnUntil=Math.min(a.spawnUntil,m.time);this.body.reset(spot);this.body.height=.36;this.savedYaw=a.yaw;this.savedPitch=a.pitch;p.vx=p.vz=0;p.sliding=false;this.yaw=yaw;this.pitch=-.06;this.born=m.time;this.state='drive';this.command={};this.nextMotor=m.time;this.reason='ENLACE ESTABLE';m.events.push({type:'rc-start',actor:0,position:spot});return true;
  }
  control(input){const c=this.command;c.x=input.x;c.z=input.z;c.sprint=input.sprint;c.jump=input.jump;c.fireStart=input.fireStart;this.yaw=input.yaw;this.pitch=clamp(input.pitch,-.85,.8);}
  stop(reason='SEÑAL PERDIDA'){if(!this.active)return;this.state='lost';this.until=this.match.time+1.1;this.reason=reason;this.body.vx=this.body.vy=this.body.vz=0;this.command={};Object.assign(this.body.previous,{x:this.body.x,y:this.body.y,z:this.body.z});this.match.events.push({type:'rc-lost',actor:0});}

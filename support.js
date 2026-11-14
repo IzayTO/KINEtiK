@@ -16,9 +16,9 @@ export class Support{
   // Called only after this decision's real visual observation; this is a snapshot, never a tracker.
   if(!b.memory?.confirmed||m.time-b.lastSeen>.12)return;const t=b.target.body;this.ping(b,{x:t.x,y:t.y+t.height+.2,z:t.z},true);b.nextReport=m.time+14;this.nextSquadPing=m.time+5;
  }
- available(a=this.match.player){const m=this.match;return !!(a.alive&&a.airCharges>0&&m.running&&!m.ended&&!m.staging&&!m.remote.engaged&&!this.flight);}
+ available(a=this.match.player){const m=this.match;return !!(!m.nuclear?.restricted&&a.alive&&a.airCharges>0&&m.running&&!m.ended&&!m.staging&&!m.remote.engaged&&!this.flight);}
  deploy(points){const m=this.match,a=m.player;if(!this.available(a)||points.length!==3)return false;const targets=points.map(p=>this.point(p.x,p.z));if(targets.some(p=>!p))return false;
-  a.airCharges--;const cx=targets.reduce((s,p)=>s+p.x,0)/3,cz=targets.reduce((s,p)=>s+p.z,0)/3,sign=(++this.serial%2)?1:-1,span=Math.max(m.level.width||96,m.level.depth||96)+65;
+  m.nuclear?.recordUse('airstrike',a);a.airCharges--;const cx=targets.reduce((s,p)=>s+p.x,0)/3,cz=targets.reduce((s,p)=>s+p.z,0)/3,sign=(++this.serial%2)?1:-1,span=Math.max(m.level.width||96,m.level.depth||96)+65;
   this.flight={born:m.time,cx,cz,sign,span,duration:12,next:0,targets,owner:a,x:cx-span*.707,y:68,z:cz-sign*span*.707,previousX:cx-span*.707,previousZ:cz-sign*span*.707,vx:span*1.414/12,vz:sign*span*1.414/12};
   a.spawnUntil=Math.min(a.spawnUntil,m.time);m.events.push({type:'airstrike-called',actor:a.id});return true;
  }
