@@ -1,15 +1,15 @@
 import {FieldEffects} from './field-effects.js';
 import * as T from './three.module.min.js';
 import {itemGeometry,itemModel} from './field-models.js';
-import {trajectory,PROJECTILE_LIMIT} from './ordnance.js';
+import {trajectory,PROJECTILE_LIMIT,TRAJECTORY_POINTS} from './ordnance.js';
 import {clamp} from './physics.js';
 import {segment} from './weapon-models.js';
 const kinds=['grenade','molotov','gas','antidote','rocket'];
 export class FieldView{
  constructor(view){this.view=view;this.matrix=new T.Matrix4();this.temp=new T.Object3D();this.color=new T.Color();this.right=new T.Vector3();this.up=new T.Vector3();this.itemMaterial=new T.MeshLambertMaterial({vertexColors:true});this.projectileBatches=kinds.map(kind=>{const mesh=new T.InstancedMesh(itemGeometry(kind==='rocket'?'rocket-projectile':kind),this.itemMaterial,PROJECTILE_LIMIT+20);mesh.count=0;mesh.frustumCulled=false;mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);view.scene.add(mesh);return mesh;});
   this.effects=new FieldEffects(view);
-  this.previewGeometry=new T.BufferGeometry();this.previewGeometry.setAttribute('position',new T.BufferAttribute(new Float32Array(72*3),3).setUsage(T.DynamicDrawUsage));this.preview=new T.Points(this.previewGeometry,new T.PointsMaterial({color:0xb7f7da,size:.07,depthWrite:false}));this.preview.frustumCulled=false;view.scene.add(this.preview);
-  this.landingMarker=new T.Mesh(new T.RingGeometry(.19,.22,24),new T.MeshBasicMaterial({color:0xb7f7da,transparent:true,opacity:.8,side:T.DoubleSide,depthWrite:false}));view.scene.add(this.landingMarker);this.landingMarker.visible=false;
+  this.previewGeometry=new T.BufferGeometry();this.previewGeometry.setAttribute('position',new T.BufferAttribute(new Float32Array(TRAJECTORY_POINTS*3),3).setUsage(T.DynamicDrawUsage));this.preview=new T.Points(this.previewGeometry,new T.PointsMaterial({color:0xb7f7da,size:3,sizeAttenuation:false,depthWrite:false}));this.preview.frustumCulled=false;view.scene.add(this.preview);
+  this.landingMarker=new T.Mesh(new T.RingGeometry(.25,.29,32),new T.MeshBasicMaterial({color:0xb7f7da,transparent:true,opacity:.8,side:T.DoubleSide,depthWrite:false}));view.scene.add(this.landingMarker);this.landingMarker.visible=false;this.landingNormal=new T.Vector3();this.markerAxis=new T.Vector3(0,0,1);
   this.hand=new T.Group();view.gunScene.add(this.hand);this.wrist=new T.Group();this.hand.add(this.wrist);this.handItems=Object.fromEntries(kinds.map(k=>{const mesh=itemModel(k);this.wrist.add(mesh);return[k,mesh];}));const mat=new T.MeshLambertMaterial({color:0x897f61});this.fore=new T.Mesh(new T.BoxGeometry(.085,1,.10),mat);this.upper=new T.Mesh(new T.BoxGeometry(.12,1,.13),mat);this.glove=new T.Mesh(new T.BoxGeometry(.10,.09,.11),new T.MeshLambertMaterial({color:0x304c50}));this.wrist.add(this.glove);this.glove.position.y=-.065;this.hand.add(this.fore,this.upper);
   this.rings=[];this.flags=[];this.match=null;this.elbowPoint=new T.Vector3(.13,-.15,.2);this.shoulderPoint=new T.Vector3(.25,-.30,.42);this.preview.visible=false;this.hand.visible=false;
  }
@@ -33,8 +33,8 @@ export class FieldView{
   if(this.preview.visible){
    // Recompute every rendered frame from the interpolated body and current finger angles.
    const b=a.body,prev=b.previous,body={x:prev.x+(b.x-prev.x)*alpha,y:prev.y+(b.y-prev.y)*alpha,z:prev.z+(b.z-prev.z)*alpha,height:b.height};
-   const path=trajectory(m.world,{body},action&&!action.released?action.yaw:input.yaw,action&&!action.released?action.pitch:input.pitch,m.params.gravity,40),pos=this.previewGeometry.attributes.position;
-   path.points.forEach((v,i)=>pos.setXYZ(i,v.x,v.y,v.z));this.previewGeometry.setDrawRange(0,path.points.length);pos.needsUpdate=true;if(path.hit){this.landingMarker.visible=true;this.landingMarker.position.set(path.landing.x,path.landing.y+.018,path.landing.z);this.landingMarker.quaternion.copy(this.view.camera.quaternion);}
+   const path=trajectory(m.world,{body},action&&!action.released?action.yaw:input.yaw,action&&!action.released?action.pitch:input.pitch,m.params.gravity,30),pos=this.previewGeometry.attributes.position;
+   path.points.forEach((v,i)=>pos.setXYZ(i,v.x,v.y,v.z));this.previewGeometry.setDrawRange(0,path.points.length);pos.needsUpdate=true;if(path.hit){this.landingMarker.visible=true;this.landingNormal.set(path.normal.x,path.normal.y,path.normal.z);this.landingMarker.position.set(path.landing.x,path.landing.y,path.landing.z).addScaledVector(this.landingNormal,.018);this.landingMarker.quaternion.setFromUnitVectors(this.markerAxis,this.landingNormal);}
   }
  }
 }

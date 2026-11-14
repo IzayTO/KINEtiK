@@ -26,12 +26,19 @@ export class FieldEffects{
   const flames=[];for(let i=0;i<(['rocket','airstrike'].includes(z.kind)?0:62);i++){const a=i*2.399+z.seed,r=Math.sqrt((i+.5)/62)*fireRadius(z,z.start+1,a)*.96;const f=valid(z.x+Math.cos(a)*r,z.z+Math.sin(a)*r);if(f)flames.push({x:f.x,y:f.y,z:f.z,seed:i*.731});}
   cached={edge,flames};this.shapes.set(z.id,cached);return cached;
  }
- explosion(z,age){const scale=z.kind==='rc'?1.32:1,fade=clamp((1.5-age)/.75,0,1),ramp=1-Math.exp(-age*15);if(age<.19)this.quad(z.x,z.y+.4,z.z,(1.2+ramp*3.4)*scale,(1.2+ramp*3.4)*scale,0xffeac1,(1-age/.19)*.9,2);
+ explosion(z,age){const scale=1,fade=clamp((1.5-age)/.75,0,1),ramp=1-Math.exp(-age*15);if(age<.19)this.quad(z.x,z.y+.4,z.z,(1.2+ramp*3.4)*scale,(1.2+ramp*3.4)*scale,0xffeac1,(1-age/.19)*.9,2);
   for(let i=0;i<18;i++){const a=i*2.399+z.seed,ring=.25+age*(1.5+(i%4)*.32),x=z.x+Math.cos(a)*ring*scale,Z=z.z+Math.sin(a)*ring*scale,y=z.y+.45+age*(.7+(i%5)*.24),size=(.55+ramp*.6+age*.95)*scale;this.quad(x,y,Z,size,size*(1.05+(i%3)*.1),age<.30?(i%2?0xffa047:0xe45d29):i%2?0x595b54:0x77776a,fade*(age<.3?.68:.38),0,a*.3);
    if(i<9&&age<.55)this.quad(x,y+.1,Z,size*.45,size*.8,0xffd48a,clamp((.55-age)/.4,0,1)*.8,1,Math.sin(a)*.6);
   }
   // Low dust skirt and short hot fragments read as a blast, not a single soft blob.
   for(let i=0;i<12;i++){const a=i*Math.PI/6+z.seed,r=(.3+age*4.2)*scale;this.quad(z.x+Math.cos(a)*r,z.y+.12+age*.12,z.z+Math.sin(a)*r,(.7+age*1.5)*scale,.3+age*.3,0xa99e7c,fade*.24,0);if(age<.65){const d=(.6+age*(4+i%3))*scale;this.quad(z.x+Math.cos(a)*d,z.y+.3+age*(2.8+i%2)-age*age*4,z.z+Math.sin(a)*d,.035,.11,0xffd293,(1-age/.65)*.85,2,-a);}}
+ }
+ rcExplosion(z,age){if(age>=2.2)return;
+  // Dense hot core and smoke, followed by a broad low dust wave. The existing
+  // shared atlas/buffer draws everything: no new lights, meshes or shadow maps.
+  this.rocketExplosion(z,age*(3.2/2.2),1.25);
+  if(age<.8){const wave=11*(1-Math.exp(-age*7)),fade=(1-age/.8)*.38;for(let i=0;i<18;i++){const angle=i*Math.PI/9+z.seed;this.quad(z.x+Math.cos(angle)*wave,z.y+.10+age*.25,z.z+Math.sin(angle)*wave,1.2+age*2.8,.4+age*.5,0xb0a38c,fade,0,Math.sin(angle)*.10);}}
+  if(age<.65)for(let i=0;i<10;i++){const angle=i*2.399+z.seed,r=.5+age*(6+i%3);this.quad(z.x+Math.cos(angle)*r,z.y+.25+age*(4+i%3)-age*age*5,z.z+Math.sin(angle)*r,.045,.17,0xffd79c,(1-age/.65)*.8,2,angle);}
  }
  blastQuad(x,y,z,w,h,color,alpha,type=0,angle=0){const o=this.blastOrigin,s=this.blastScale;this.quad(o.x+(x-o.x)*s,o.y+(y-o.y)*s,o.z+(z-o.z)*s,w*s,h*s,color,alpha,type,angle);}
  rocketExplosion(z,age,scale=1){if(age>3.2)return;const o=z.impact||z,fade=clamp((3.2-age)/1.5,0,1),burst=1-Math.exp(-age*18);this.blastOrigin=o;this.blastScale=scale;
@@ -42,7 +49,7 @@ export class FieldEffects{
  }
  update(time){const m=this.view.match;if(!m)return;this.count=0;this.floorCount=0;this.right.setFromMatrixColumn(this.view.camera.matrixWorld,0);this.up.setFromMatrixColumn(this.view.camera.matrixWorld,1);
   for(const z of m.ordnance.areas){if(!z.active)continue;const age=Math.max(0,time-z.start);
-   if(z.kind==='grenade'||z.kind==='rc'){this.explosion(z,age);continue;}
+   if(z.kind==='grenade'){this.explosion(z,age);continue;}if(z.kind==='rc'){this.rcExplosion(z,age);continue;}
    if(z.kind==='gas'){const fade=clamp(age/.4,0,1)*clamp((GAS_ACTIVE+GAS_FADE-age)/GAS_FADE,0,1);for(let i=0;i<15;i++){const a=i*2.399+z.seed+Math.sin(time*.6+i)*.10,r=(i%4)*.52;this.quad(z.x+Math.cos(a)*r,z.y+.55+(i%3)*.56+Math.sin(time*1.3+i)*.13,z.z+Math.sin(a)*r,1.7,1.6,i%2?0xb7c66b:0x8ca850,fade*.34,0,i*.2);}continue;}
    if(z.kind==='rocket')this.rocketExplosion(z,age);if(z.kind==='airstrike')this.rocketExplosion(z,age*.82,1.9);
    const air=z.kind==='airstrike',rocket=air||z.kind==='rocket',shape=this.shape(z),growth=clamp(age/(rocket?.18:1),0,1),opacity=air?(age<=25?.94:.94*clamp((30-age)/5,0,1)):rocket?(age<=13?.94:.94*clamp((20-age)/7,0,1)):(age<=11?.90:.90*clamp((26-age)/15,0,1)),p=this.ground.attributes.position,c=this.ground.attributes.color,uv=this.ground.attributes.uv,R=air?20:rocket?8:THROWABLES.molotov.radius;

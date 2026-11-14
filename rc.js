@@ -2,7 +2,7 @@
 // Player movement parameters and the player controller are not changed.
 import {Player,clamp} from './physics.js';
 import {obstruction,distance} from './navigation.js';
-export const RC_CONNECT_SECONDS=.85,RC_LIFETIME=20,RC_KILL_RADIUS=2.5,RC_DAMAGE_RADIUS=4;
+export const RC_CONNECT_SECONDS=.85,RC_LIFETIME=20,RC_KILL_RADIUS=11,RC_DAMAGE_RADIUS=15;
 export class RemoteCar{
  constructor(match){this.match=match;this.body=new Player(match.world,match.params);this.reset();}
  reset(){this.state='idle';this.born=0;this.until=0;this.command={};this.reason='';this.savedYaw=0;this.savedPitch=0;this.yaw=0;this.pitch=0;}
@@ -17,8 +17,8 @@ export class RemoteCar{
  stop(reason='SEÑAL PERDIDA'){if(!this.active)return;this.state='lost';this.until=this.match.time+1.1;this.reason=reason;this.body.vx=this.body.vy=this.body.vz=0;this.command={};Object.assign(this.body.previous,{x:this.body.x,y:this.body.y,z:this.body.z});this.match.events.push({type:'rc-lost',actor:0});}
  explode(){if(!this.active)return;const m=this.match,p=this.body,o={x:p.x,y:p.y+.24,z:p.z};
   // Reserve an existing short-lived explosion slot; no unbounded FX allocation.
-  let z=m.ordnance.areas.find(a=>!a.active)||m.ordnance.areas.find(a=>a.kind==='rc'||a.kind==='grenade');if(z)Object.assign(z,{active:true,id:++m.ordnance.serial,kind:'rc',owner:m.player,...o,start:m.time,seed:m.time*2.399});
-  for(const a of m.actors){if(!a.alive||!m.enemy(m.player,a))continue;const target={x:a.body.x,y:a.body.y+Math.min(1,a.body.height*.6),z:a.body.z},d=Math.hypot(p.x-a.body.x,p.z-a.body.z,Math.max(0,Math.abs(p.y-a.body.y)-.3));if(d>RC_DAMAGE_RADIUS||obstruction(m.world.colliders,o,target)<.999)continue;const amount=d<=RC_KILL_RADIUS?1000:160*(RC_DAMAGE_RADIUS-d)/(RC_DAMAGE_RADIUS-RC_KILL_RADIUS);m.damage(a,amount,m.player,'rc',{position:o});}
+  let z=m.ordnance.areas.find(a=>!a.active)||m.ordnance.areas.find(a=>a.kind==='rc'||a.kind==='grenade');if(z)Object.assign(z,{active:true,id:++m.ordnance.serial,kind:'rc',owner:m.player,...o,impact:null,start:m.time,seed:m.time*2.399});
+  for(const a of m.actors){if(!a.alive||!m.enemy(m.player,a))continue;const target={x:a.body.x,y:a.body.y+Math.min(1,a.body.height*.6),z:a.body.z},d=Math.hypot(p.x-a.body.x,p.z-a.body.z,Math.max(0,Math.abs(p.y-a.body.y)-.3));if(d>RC_DAMAGE_RADIUS||obstruction(m.world.colliders,o,target)<.999)continue;const amount=d<=RC_KILL_RADIUS+1e-9?1000:160*(RC_DAMAGE_RADIUS-d)/(RC_DAMAGE_RADIUS-RC_KILL_RADIUS);m.damage(a,amount,m.player,'rc',{position:o});}
   m.events.push({type:'explosion',actor:0,position:o});m.sounds.push({id:0,team:m.player.team,...o,radius:36,kind:'explosion',expires:m.time+.7,stamp:m.time});this.stop();
  }
  step(dt){const m=this.match;if(this.state==='lost'){if(m.time>=this.until){this.state='idle';m.events.push({type:'rc-end',actor:0});}return;}if(!this.active)return;

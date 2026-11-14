@@ -2,6 +2,8 @@ import {clamp,circleContact,surfaceY} from './physics.js';
 import {obstruction,distance,angleDelta} from './navigation.js';
 export const THROWABLES=Object.freeze({grenade:{name:'GRANADA',count:3,radius:7},molotov:{name:'MOLOTOV',count:3,radius:11.5},gas:{name:'GAS N-09',count:2,radius:2.5},rocket:{name:'R-12 / LANZACOHETES',count:0,radius:20}});
 export const PROJECTILE_LIMIT=48,AREA_LIMIT=64,GAS_ACTIVE=10,GAS_FADE=1;
+// Shared by prediction, actual throws and the bots' ballistic aiming.
+export const THROW_SPEED=36,THROW_LIFT=6.5,THROW_LIFETIME=10,TRAJECTORY_POINTS=256;
 const pos=a=>({x:a.body.x,y:a.body.y+Math.min(1.35,a.body.height*.75),z:a.body.z});
 export function floorAt(world,p,down=15){let best=null;for(const c of world.query(p.x,p.z,.02)){if(!circleContact(c,p.x,p.z,.001)?.inside)continue;const y=surfaceY(c,p.x,p.z);if(y<=p.y+.12&&y>=p.y-down&&(!best||y>best.y))best={x:p.x,y,z:p.z,c};}return best;}
 // Swept radius against existing convex solids; no changes to character physics.
@@ -11,9 +13,24 @@ export function projectileTrace(world,a,b,r=.075){let fraction=1,solid=null,poin
  for(let i=0;i<c.poly.length;i++){const u=c.poly[i],v=c.poly[(i+1)%c.poly.length],dx=v[0]-u[0],dz=v[1]-u[1],len=Math.hypot(dx,dz),d=Math.abs(dx*(p.z-u[1])-dz*(p.x-u[0]))/len;if(d<gap){gap=d;normal={x:dz/len,y:0,z:-dx/len};}}
  const length=Math.hypot(normal.x,normal.y,normal.z);normal.x/=length;normal.y/=length;normal.z/=length;return{fraction,normal,solid};
 }
-export function launchState(a,yaw,pitch){const o=pos(a),cp=Math.cos(pitch);return{x:o.x,y:o.y+.08,z:o.z,vx:-Math.sin(yaw)*cp*17,vy:Math.sin(pitch)*17+3.4,vz:-Math.cos(yaw)*cp*17};}
+export function launchState(a,yaw,pitch){const o=pos(a),cp=Math.cos(pitch);return{x:o.x,y:o.y+.08,z:o.z,vx:-Math.sin(yaw)*cp*THROW_SPEED,vy:Math.sin(pitch)*THROW_SPEED+THROW_LIFT,vz:-Math.cos(yaw)*cp*THROW_SPEED};}
 export function advanceProjectile(world,p,dt,gravity=24){const end={x:p.x+p.vx*dt,y:p.y+p.vy*dt-.5*gravity*dt*dt,z:p.z+p.vz*dt},hit=projectileTrace(world,p,end);p.vy-=gravity*dt;if(hit){const t=Math.max(0,hit.fraction-.002);p.x+=(end.x-p.x)*t;p.y+=(end.y-p.y)*t;p.z+=(end.z-p.z)*t;return hit;}Object.assign(p,end);return null;}
-export function trajectory(world,a,yaw,pitch,gravity=24,frequency=60){const p=launchState(a,yaw,pitch),points=[{x:p.x,y:p.y,z:p.z}];for(let i=0;i<Math.ceil(frequency*3.5);i++){const hit=advanceProjectile(world,p,1/frequency,gravity);if(i%Math.round(frequency/20)===0||hit)points.push({x:p.x,y:p.y,z:p.z});if(hit)return{points,landing:{x:p.x,y:p.y,z:p.z},hit:true};}return{points,landing:{x:p.x,y:p.y,z:p.z},hit:false};}
+// Swept parabolic segments: the preview is refreshed every rendered frame. Dots
+// are spaced in metres instead of time, so the arc does not thin out at high speed.
+export function trajectory(world,a,yaw,pitch,gravity=24,frequency=30){
+ const p=launchState(a,yaw,pitch),points=[{x:p.x,y:p.y,z:p.z}],dt=1/clamp(frequency,20,120),spacing=.85;let nextDot=spacing;
+ for(let i=0;i<Math.ceil(THROW_LIFETIME/dt);i++){
+  const x=p.x,y=p.y,z=p.z,hit=advanceProjectile(world,p,dt,gravity),dx=p.x-x,dy=p.y-y,dz=p.z-z,length=Math.hypot(dx,dy,dz);
+  while(length>0&&nextDot<=length&&points.length<TRAJECTORY_POINTS-1){const t=nextDot/length;points.push({x:x+dx*t,y:y+dy*t,z:z+dz*t});nextDot+=spacing;}nextDot-=length;
+  if(hit||p.y< -4||i===Math.ceil(THROW_LIFETIME/dt)-1){const landing={x:p.x,y:p.y,z:p.z};points.push(landing);return{points,landing,hit:!!hit,normal:hit?.normal};}
+ }
+}
+// Solve low/high arcs without collision queries, then validate only those paths.
+// This keeps bots accurate with the new launch strength, also for nearby targets.
+export function throwAngles(a,target,gravity=24){const o=pos(a),d=Math.hypot(target.x-o.x,target.z-o.z),angles=[];if(d<.1)return angles;
+ const error=pitch=>{const t=d/(Math.cos(pitch)*THROW_SPEED);return o.y+.08+(Math.sin(pitch)*THROW_SPEED+THROW_LIFT)*t-.5*gravity*t*t-(target.y+.08);};
+ let previous=-1.4,value=error(previous);for(let i=1;i<=24;i++){const pitch=-1.4+i*2.8/24,current=error(pitch);if(value*current<=0){let low=previous,high=pitch,base=value;for(let n=0;n<13;n++){const mid=(low+high)/2,v=error(mid);if(base*v<=0)high=mid;else{low=mid;base=v;}}angles.push((low+high)/2);}previous=pitch;value=current;}return angles;
+}
 export function fireRadius(area,time,angle=0){return THROWABLES.molotov.radius*clamp((time-area.start),0,1)*(.87+.08*Math.sin(angle*3+area.seed)+.05*Math.sin(angle*7-area.seed));}
 export class Ordnance{
  constructor(match){this.match=match;this.projectiles=Array.from({length:PROJECTILE_LIMIT},()=>({active:false}));this.areas=Array.from({length:AREA_LIMIT},()=>({active:false}));this.serial=0;this.reset();}
@@ -24,7 +41,7 @@ export class Ordnance{
  trigger(a,yaw,pitch){const m=this.match;if(m.staging||!a.alive||!m.running||m.ended||!a.held||!a.equipment[a.held]||a.throwAction||m.time<a.throwReady||a.consuming)return false;
  if(!this.projectiles.some(p=>!p.active)||this.areas.filter(z=>z.active).length+this.projectiles.filter(p=>p.active).length>=AREA_LIMIT)return false;
  a.throwAction={kind:a.held,start:m.time,release:m.time+(a.held==='rocket'?.035:.24),end:m.time+.68,yaw,pitch,released:false};a.throwReady=m.time+.9;this.match.supplies.cancel(a);a.spawnUntil=Math.min(a.spawnUntil,m.time);return true;}
- release(a,action){const p=this.projectiles.find(p=>!p.active);if(!p)return;const state=launchState(a,action.yaw,action.pitch);if(action.kind==='rocket'){const cp=Math.cos(action.pitch);state.vx=-Math.sin(action.yaw)*cp*52;state.vy=Math.sin(action.pitch)*52;state.vz=-Math.cos(action.yaw)*cp*52;}Object.assign(p,state,{previous:{x:state.x,y:state.y,z:state.z},active:true,id:++this.serial,kind:action.kind,owner:a,born:this.match.time,rest:false,explodeAt:Infinity,spin:a.id*.7});a.equipment[action.kind]--;action.released=true;this.match.events.push({type:action.kind==='rocket'?'rocket-shot':'throw',actor:a.id,kind:action.kind,position:pos(a)});this.match.hear(a,12,'throw');}
+ release(a,action){const p=this.projectiles.find(p=>!p.active);if(!p)return;const state=launchState(a,action.yaw,action.pitch);if(action.kind==='rocket'){const cp=Math.cos(action.pitch);state.vx=-Math.sin(action.yaw)*cp*52;state.vy=Math.sin(action.pitch)*52;state.vz=-Math.cos(action.yaw)*cp*52;}Object.assign(p,state,{previous:{x:state.x,y:state.y,z:state.z},active:true,id:++this.serial,kind:action.kind,owner:a,born:this.match.time,spin:a.id*.7});a.equipment[action.kind]--;action.released=true;this.match.events.push({type:action.kind==='rocket'?'rocket-shot':'throw',actor:a.id,kind:action.kind,position:pos(a)});this.match.hear(a,12,'throw');}
  createArea(p){const z=this.areas.find(z=>!z.active);if(!z)return;const f=floorAt(this.match.world,p),kind=p.kind;Object.assign(z,{active:true,id:++this.serial,kind,owner:p.owner,x:p.x,y:kind==='grenade'?p.y:(f?.y??p.y),z:p.z,floor:f?.c,start:this.match.time,seed:p.id*2.399,nextDamage:0,nextSound:0});
  if(kind==='rocket'){z.impact={x:p.x,y:p.y,z:p.z};this.rocketBlast(p);}
  this.match.events.push({type:kind==='rocket'?'rocket-explosion':kind==='grenade'?'explosion':kind==='molotov'?'glass':'gas',actor:p.owner.id,position:{x:z.x,y:z.y,z:z.z}});
@@ -41,12 +58,11 @@ export class Ordnance{
  for(const a of m.actors){const action=a.throwAction;if(action){if(!a.alive){a.throwAction=null;a.held=null;}else{if(!action.released&&time>=action.release)this.release(a,action);if(time>=action.end){a.throwAction=null;if(!a.equipment[action.kind]||!a.human){a.held=null;a.arsenal.select(1);}}}}
  }
  for(const p of this.projectiles){if(!p.active)continue;p.previous.x=p.x;p.previous.y=p.y;p.previous.z=p.z;
-  if(p.rest){if(time>=p.explodeAt){this.createArea(p);p.active=false;}continue;}
   if(p.kind==='rocket'){const v=Math.hypot(p.vx,p.vy,p.vz),ray={x:p.vx/v,y:p.vy/v,z:p.vz/v},target=m.lineTarget(p.owner,p,ray,v*dt);if(target.actor){Object.assign(p,target.point);this.createArea(p);p.active=false;continue;}}
-  const hit=advanceProjectile(m.world,p,dt,p.kind==='rocket'?0:m.params.gravity);if(hit){if(p.kind!=='grenade'){this.createArea(p);p.active=false;continue;}const n=hit.normal;if(n.y>.5){p.rest=true;p.explodeAt=time+1;p.vx=p.vy=p.vz=0;}else{const dot=p.vx*n.x+p.vy*n.y+p.vz*n.z;p.vx=(p.vx-2*dot*n.x)*.35;p.vy=(p.vy-2*dot*n.y)*.35;p.vz=(p.vz-2*dot*n.z)*.35;p.x+=n.x*.02;p.y+=n.y*.02;p.z+=n.z*.02;}}
-  if(time-p.born>8||p.y< -4){p.active=false;}
+  const hit=advanceProjectile(m.world,p,dt,p.kind==='rocket'?0:m.params.gravity);if(hit){this.createArea(p);p.active=false;continue;}
+  if(time-p.born>(p.kind==='rocket'?8:THROW_LIFETIME)||p.y< -4){p.active=false;}
  }
- for(const z of this.areas){if(!z.active)continue;const age=time-z.start;if(age>(z.kind==='airstrike'?30:z.kind==='rocket'?20:z.kind==='molotov'?26:z.kind==='gas'?GAS_ACTIVE+GAS_FADE:1.5)){z.active=false;continue;}
+ for(const z of this.areas){if(!z.active)continue;const age=time-z.start;if(age>(z.kind==='airstrike'?30:z.kind==='rocket'?20:z.kind==='rc'?2.2:z.kind==='molotov'?26:z.kind==='gas'?GAS_ACTIVE+GAS_FADE:1.5)){z.active=false;continue;}
   if(z.kind==='molotov'&&age<11&&time>=z.nextDamage){z.nextDamage=time+.5;for(const a of m.actors)if(this.inside(z,a)){const amount=12*(age<=8?1:clamp((11-age)/3,0,1));if(amount>.1){if(m.damage(a,amount,z.owner,'molotov',{self:true,position:z}))a.burnUntil=time+.65;}}}
   if(z.kind==='molotov'&&age<10&&time>=z.nextSound){z.nextSound=time+.7;m.events.push({type:'fire-loop',actor:-1,position:z});}
  }
@@ -72,7 +88,7 @@ export class Ordnance{
   let kinds=b.profile.name==='Defensivo'?['molotov','gas','grenade']:b.profile.name==='Táctico'?['gas','molotov','grenade']:['grenade','molotov','gas'];if(b.health<40)kinds=['gas','molotov','grenade'];const kind=kinds.find(k=>b.equipment[k]>0);if(!kind)return false;
   if(b.rng()>.30+.30*diff.tactics+.15*b.profile.advance)return false;
   const yaw=Math.atan2(-(target.x-p.x),-(target.z-p.z));let best=null;if(Math.abs(angleDelta(b.yaw,yaw))>.5)return false;
-  for(const pitch of [-.05,.14,.32,.50,.68]){const path=trajectory(m.world,b,yaw,pitch,m.params.gravity),landing=path.landing,score=distance(landing,target)+Math.abs(landing.y-target.y)*2;if(path.hit&&distance(p,landing)>(kind==='molotov'?THROWABLES.molotov.radius+1:8)&&score<(best?.score??5))best={pitch,score,landing};}
+  for(const pitch of throwAngles(b,target,m.params.gravity)){const path=trajectory(m.world,b,yaw,pitch,m.params.gravity),landing=path.landing,score=distance(landing,target)+Math.abs(landing.y-target.y)*2;if(path.hit&&distance(p,landing)>(kind==='molotov'?THROWABLES.molotov.radius+1:8)&&score<(best?.score??5))best={pitch,score,landing};}
   if(!best||m.actors.some(a=>a!==b&&a.alive&&!m.enemy(b,a)&&distance(a.body,best.landing)<(kind==='molotov'?THROWABLES.molotov.radius+1:7.5)))return false;
   if(this.select(b,kind)){if(this.trigger(b,yaw,best.pitch)){b.nextThrow=time+7+b.rng()*8;return false;}b.held=null;}return false;
  }
