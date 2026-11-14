@@ -3,6 +3,16 @@ import {clamp,BODY} from './physics.js';
 import {floorAt,projectileTrace} from './ordnance.js';
 export const ATOMIC_KILLS=41,ALARM_SECONDS=20,FADE_SECONDS=2,ATOMIC_PULSES=5;
 export const ATOMIC_DEATHS=['DEMASIADO URANIO-235','SE ROMPIÓ TU ENLACE','FISIÓN: FIN DE SESIÓN','TU DOSIS SUPERÓ EL LÍMITE','QUEDASTE FUERA DEL ESPECTRO','LA REACCIÓN FUE EN CADENA','TU SEÑAL SE DESINTEGRÓ','NÚCLEO INESTABLE'];
+const smooth=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
+// Shared envelope: two seconds of siren/light, two seconds of darkness.
+// Rendering and audio use the same simulation clock, including the final fade.
+export function atomicAlarm(age){const phase=((age%4)+4)%4,fade=clamp((22-age)/2,0,1);return smooth(phase/.22)*(1-smooth((phase-1.65)/.30))*fade;}
+export function atomicExposure(n,night){if(!n?.active)return{dark:1,red:0,pulse:0,sky:0,glow:0};const blast=n.impactAge,hit=n.impacted,nightFade=smooth((n.age-20)/2),recover=hit?smooth((blast-1.6)/5.8):0;return{
+ dark:night?1-.9*nightFade:hit?.1+.9*recover:1,
+ red:night&&!hit?smooth(n.age/.7):0,pulse:night?atomicAlarm(n.age):0,
+ sky:night?nightFade*.65:hit?1-recover:0,
+ glow:hit?(1.95*Math.exp(-blast*.24)+.3)*clamp((9.2-blast)/2,0,1):0
+ };}
 export class Nuclear{
  constructor(match){this.match=match;this.reset();}
  reset(){this.used=new Set();this.unlocked=false;this.state='idle';this.started=0;this.impactAt=null;this.pulses=0;this.roared=false;this.origin={x:0,y:0,z:0};this.bomb=null;this.roster=[];this.deathLine=ATOMIC_DEATHS[Math.floor(Math.random()*ATOMIC_DEATHS.length)];}

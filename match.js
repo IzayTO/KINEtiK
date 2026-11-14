@@ -35,7 +35,7 @@ const direction=(yaw,pitch)=>({x:-Math.sin(yaw)*Math.cos(pitch),y:Math.sin(pitch
 function sphereDistance(o,d,c,r){const x=o.x-c.x,y=o.y-c.y,z=o.z-c.z,b=x*d.x+y*d.y+z*d.z,h=b*b-(x*x+y*y+z*z-r*r);if(h<0)return Infinity;const t=-b-Math.sqrt(h);return t>=0?t:(-b+Math.sqrt(h)>=0?0:Infinity);}
 export class Match{
  constructor(world,player,arsenal,params=DEFAULTS,level={}){this.world=world;this.level=level;world.level=level;this.params=params;this.nav=new Navigation(world);this.player={id:0,name:'TÚ',body:player,arsenal,team:'blue',human:true};this.actors=[this.player];this.bots=[];this.events=[];this.sounds=[];this.time=0;this.running=false;this.ended=false;this.config={...MATCH_DEFAULTS};this.rng=randomStream(91223);this.crates=[];this.routeBudget=0;this.metrics={decisions:0,los:0,shots:0,replans:0,jumps:0,slides:0};this.qualityScale=1;this.setupCrates();this.initialize(this.player);this.supplies=new Supplies(this);this.supplies.reset();this.blood=new BloodTrail(world);this.ordnance=new Ordnance(this);this.objectives=new Objectives(this);this.remote=new RemoteCar(this);this.support=new Support(this);this.awards=new Accolades(this);this.nuclear=new Nuclear(this);}
- initialize(a){a.atomicDown=false;a.health=100;a.shield=100;a.alive=true;a.kills=0;a.deaths=0;a.captures=0;a.rcCharges=0;a.airCharges=0;a.spawnUntil=0;a.deadUntil=0;a.lastDamage=-100;a.hit=0;a.yaw=0;a.pitch=0;a.shotUntil=0;a.radarShot=null;}
+ initialize(a){a.waiting=false;a.atomicDown=false;a.health=100;a.shield=100;a.alive=true;a.kills=0;a.deaths=0;a.captures=0;a.rcCharges=0;a.airCharges=0;a.spawnUntil=0;a.deadUntil=0;a.lastDamage=-100;a.hit=0;a.yaw=0;a.pitch=0;a.shotUntil=0;a.radarShot=null;}
  enemy(a,b){return a!==b&&(this.config.mode==='ffa'||a.team!==b.team);}
  visible(a,b,range=52,fov=true){if(!b.alive||!this.enemy(a,b)||this.time<b.spawnUntil)return false;const pa=eye(a),pb=chest(b),d=distance(pa,pb);if(d>range||Math.abs(pa.y-pb.y)>14)return false;const yaw=Math.atan2(-(pb.x-pa.x),-(pb.z-pa.z));if(fov&&Math.abs(angleDelta(a.yaw,yaw))>1.12)return false;this.metrics.los++;return obstruction(this.world.colliders,pa,pb)>.999;}
  setupCrates(){const spots=this.level.crateSpots||[[-9,0,37],[-37,0,20],[-26,0,-10],[3,0,-39],[30,0,29],[44,0,-10],[15,2.4,4],[-34,3.2,-14]];this.crates=spots.map((v,id)=>{const n=this.nav.nearest({x:v[0],y:v[1],z:v[2]});return{id,x:n.x,y:n.y,z:n.z,available:true,ready:0,lid:0,rifle:0,shotgun:0};});for(const c of this.crates)this.stock(c);}
@@ -60,10 +60,19 @@ export class Match{
   const used=[];for(const a of this.actors){const home=this.level.bases?.[a.team]||(a.team==='blue'?[-3,37]:[0,-36]),side=a.team==='blue'?1:-1;
    // Staging is a spawn operation, before play. Every participant has distinct supported feet.
    const candidates=this.nav.nodes.filter(n=>!n.low&&n.y<.35&&n.edges.length>=3&&Math.hypot(n.x-home[0],n.z-home[1])<10).sort((n,b)=>Math.hypot(n.x-home[0],n.z-home[1])-Math.hypot(b.x-home[0],b.z-home[1]));
-   const node=candidates.find(n=>used.every(p=>distance(p,n)>1.25));if(node){a.body.reset(node);used.push(node);}a.body.vx=a.body.vy=a.body.vz=0;a.body.previous={x:a.body.x,y:a.body.y,z:a.body.z};a.yaw=a.bodyYaw=a.gunYaw=side===1?0:Math.PI;a.pitch=0;
+   const node=candidates.find(n=>used.every(p=>distance(p,n)>1.25));if(node){a.body.reset(node);used.push(node);}a.body.vx=a.body.vy=a.body.vz=0;a.body.previous={x:a.body.x,y:a.body.y,z:a.body.z};a.yaw=a.bodyYaw=a.gunYaw=side===1?0:Math.PI;a.pitch=0;if(!a.human){a.waiting=true;a.waitBase=a.yaw;a.waitTarget=a.yaw;a.waitHeadYaw=a.yaw;a.waitPitch=0;a.waitNext=.15+(a.id%5)*.41;a.waitRng=randomStream(1917+a.id*71);}
   }
  }
  get staging(){return this.warmup>0;}
+ stageGaze(dt){for(const b of this.bots){
+  if(this.warmupElapsed>=b.waitNext){const rng=b.waitRng,near=this.actors.filter(a=>a!==b&&a.team===b.team&&distance(a.body,b.body)<12),other=near.length?near[Math.floor(rng()*near.length)]:null,lookAtOther=other&&rng()<.55;
+   const yaw=lookAtOther?Math.atan2(-(other.body.x-b.body.x),-(other.body.z-b.body.z)):b.waitBase+(rng()-.5)*2.35;
+   b.waitTarget=b.waitBase+clamp(angleDelta(b.waitBase,yaw),-1.35,1.35);b.waitPitchTarget=lookAtOther?clamp(Math.atan2(other.body.y-b.body.y,Math.max(1,distance(other.body,b.body))),-.18,.18):(rng()-.5)*.25;b.waitNext=this.warmupElapsed+1.05+rng()*2.45;
+  }
+  b.waitHeadYaw+=angleDelta(b.waitHeadYaw,b.waitTarget)*(1-Math.exp(-dt*4.8));b.waitPitch+=( (b.waitPitchTarget||0)-b.waitPitch)*(1-Math.exp(-dt*3.8));
+  b.yaw+=angleDelta(b.yaw,b.waitBase+angleDelta(b.waitBase,b.waitTarget)*.43)*(1-Math.exp(-dt*1.6));b.bodyYaw+=angleDelta(b.bodyYaw,b.waitBase+angleDelta(b.waitBase,b.waitTarget)*.16)*(1-Math.exp(-dt*1.1));b.gunYaw=b.yaw;
+ }}
+
  hear(source,radius,kind){const p=source.body;this.sounds.push({id:source.id,team:source.team,x:p.x,y:p.y,z:p.z,radius,kind,expires:this.time+.7,stamp:this.time});if(this.sounds.length>40)this.sounds.shift();}
  decision(b){
   this.metrics.decisions++;const diff=DIFFICULTY[this.config.difficulty],p=b.body;
@@ -128,7 +137,7 @@ export class Match{
   const error=angleDelta(b.yaw,targetYaw),wanted=clamp(error*5,-diff.turn,diff.turn);b.yawRate+=clamp(wanted-b.yawRate,-dt*14,dt*14);b.yaw+=b.yawRate*dt;b.pitch+=clamp(targetPitch-b.pitch,-dt*2.5,dt*2.5);
   const travel=p.speed>.3?Math.atan2(-p.vx,-p.vz):b.yaw,relative=angleDelta(b.yaw,travel),want=b.target?(Math.abs(relative)>1.8?b.yaw:travel+clamp(angleDelta(travel,b.yaw),-.6,.6)):travel;b.bodyYaw+=clamp(angleDelta(b.bodyYaw,want),-dt*4.5,dt*4.5);b.gunYaw=b.bodyYaw+clamp(angleDelta(b.bodyYaw,b.yaw),-.95,.95);
  }
- step(dt){if(!this.running||this.ended)return;if(this.staging){this.warmupElapsed=Math.min(10,this.warmupElapsed+dt);this.warmup=Math.max(0,10-this.warmupElapsed);if(this.warmup<1e-7){this.warmup=0;for(const a of this.actors)a.spawnUntil=this.time+2.2;this.events.push({type:'round-live'});}return;}this.time+=dt;this.nuclear.step(dt);if(this.nuclear.impacted||this.ended)return;this.routeBudget=Math.min(2,this.routeBudget+dt*12);this.sounds=this.sounds.filter(s=>s.expires>this.time);
+ step(dt){if(!this.running||this.ended)return;if(this.staging){this.warmupElapsed=Math.min(10,this.warmupElapsed+dt);this.warmup=Math.max(0,10-this.warmupElapsed);this.stageGaze(dt);if(this.warmup<1e-7){this.warmup=0;for(const a of this.actors){a.spawnUntil=this.time+2.2;a.waiting=false;}this.events.push({type:'round-live'});}return;}this.time+=dt;this.nuclear.step(dt);if(this.nuclear.impacted||this.ended)return;this.routeBudget=Math.min(2,this.routeBudget+dt*12);this.sounds=this.sounds.filter(s=>s.expires>this.time);
   for(const a of this.actors){a.hit=Math.max(0,a.hit-dt);if(!a.alive&&this.time>=a.deadUntil)this.spawn(a);}
   for(const b of this.bots){if(!b.alive)continue;
    if(this.time>=b.nextDecision){if(!this.nuclear.restricted)this.decision(b);const far=distance(b.body,this.player.body)>38&&!b.target;b.nextDecision=this.time+(far?.25:.11)*(this.config.quality==='low'?1.5:this.config.quality==='high'?.8:this.qualityScale);}

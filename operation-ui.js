@@ -23,7 +23,7 @@ export class OperationUI{
   const alert=$('atomic-alert');alert.hidden=!editing&&(!playing||n.state!=='alarm');alert.querySelector('b').textContent=editing?'20':String(Math.max(0,Math.ceil(20-n.age)));
   const limited=playing&&n.restricted,down=playing&&n.impacted;document.body.classList.toggle('atomic-limited',limited&&!down);document.body.classList.toggle('atomic-down',down);
   const overlay=$('atomic-overlay'),death=$('atomic-death');overlay.hidden=!down;death.hidden=!down||n.pulses<5;
-  if(down){const age=n.impactAge,flash=.8*(1-ease(age/1.5)),initial=n.roster.find(r=>r.actor===m.player)?.health??100,progress=clamp((age-1.5)/4.5,0,1),since=age-(1+n.pulses),pulse=n.pulses?Math.exp(-Math.max(0,since)*5)*.18:0,red=initial<10?progress*.94:clamp(n.pulses*.145+pulse,0,.94);overlay.style.setProperty('--atomic-flash',String(flash));overlay.style.setProperty('--atomic-red',String(red));this.blur+=(progress*5-this.blur)*(1-Math.exp(-dt*5));$('game').style.filter=`blur(${this.blur.toFixed(2)}px)`;
+  if(down){const age=n.impactAge,flash=.8*(1-ease((age-.5)/.5)),initial=n.roster.find(r=>r.actor===m.player)?.health??100,progress=clamp((age-1.5)/4.5,0,1),since=age-(1+n.pulses),pulse=n.pulses?Math.exp(-Math.max(0,since)*5)*.18:0,red=initial<10?progress*.94:clamp(n.pulses*.145+pulse,0,.94);overlay.style.setProperty('--atomic-flash',String(flash));overlay.style.setProperty('--atomic-red',String(red));this.blur+=(progress*5-this.blur)*(1-Math.exp(-dt*5));$('game').style.filter=`blur(${this.blur.toFixed(2)}px)`;
    if(n.pulses>=5){const q=ease((age-6)/.42);death.querySelector('strong').textContent=n.deathLine;death.style.opacity=String(q);death.style.transform=`translate(-50%,-50%) translateY(${12*(1-q)}px) scale(${.97+.03*q})`;}
   }else{this.blur=0;}
  }

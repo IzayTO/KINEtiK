@@ -1,7 +1,8 @@
+import {atomicAlarm} from './nuclear.js';
 import {createAudioBank,BANK_SECONDS} from './audio-bank.js';
 // Original procedural sounds. Distance culling, priority stealing and bounded voices.
 const PRESETS={
- 'atomic-impact':['effects',2,55,.95,7],'atomic-roar':['effects',5.5,80,.48,6],'atomic-pulse':['effects',.48,90,.55,7],medal:['interface',.32,900,.28,4],chain:['interface',.20,700,.25,4],
+ 'atomic-impact':['effects',2,55,.95,7],'atomic-roar':['effects',8.4,80,.70,6],'atomic-pulse':['effects',.48,90,.55,7],medal:['interface',.32,900,.28,4],chain:['interface',.20,700,.25,4],
  'ping-danger':['interface',.38,1950,.29,4],'airstrike-earned':['interface',.42,1400,.30,4],'airstrike-called':['interface',.35,950,.25,4],'airstrike-impact':['effects',1.9,75,.95,5],
  'rc-start':['interface',.22,1600,.22,3],'rc-earned':['interface',.35,1350,.26,4],'rc-lost':['interface',.32,500,.20,3],'rc-engine':['effects',.34,240,.10,1],
  'rocket-shot':['weapons',.45,680,.65,5],'rocket-explosion':['effects',1.5,85,.9,5],explosion:['effects',1.15,120,.8,5],glass:['effects',.52,2800,.48,4],gas:['effects',.72,1700,.32,3],throw:['weapons',.24,900,.23,2],'fire-loop':['effects',.62,480,.24,1],antidote:['interface',.27,1900,.24,3],casing:['weapons',.28,2600,.14,1],capture:['interface',.35,1100,.30,4],'zone-captured':['interface',.25,900,.22,3],'flag-taken':['interface',.24,1250,.23,3],'flag-return':['interface',.24,1500,.23,3],
@@ -35,7 +36,7 @@ export class AudioFX{
  atomic(operation){if(!this.ctx||!this.master)return;const ctx=this.ctx,t=ctx.currentTime,active=operation?.active&&operation.age<22;
   if(active&&!this.atomicAlarm){const tone=ctx.createOscillator(),undertone=ctx.createOscillator(),filter=ctx.createBiquadFilter(),gain=ctx.createGain(),mix=ctx.createGain();tone.type='triangle';undertone.type='sine';filter.type='lowpass';filter.frequency.value=1600;mix.gain.value=.35;gain.gain.value=0;tone.connect(filter);undertone.connect(mix);mix.connect(filter);filter.connect(gain);gain.connect(this.master);tone.start();undertone.start();this.atomicAlarm={tone,undertone,filter,gain,mix};}
   const a=this.atomicAlarm;if(!a)return;const age=operation?.age||0,fade=active?Math.max(0,Math.min(1,(22-age)/2)):0,volume=(this.preferences.volumeEffects??.8)*(this.params.sound?1:0),sweep=.5-.5*Math.cos(age*Math.PI),hz=(650+sweep*430)*(age>20?.20+.80*fade:1);
-  a.gain.gain.setTargetAtTime(active?.19*volume*fade*Math.min(1,age/.35):0,t,.08);a.tone.frequency.setTargetAtTime(hz,t,.065);a.undertone.frequency.setTargetAtTime(hz*.5,t,.065);a.filter.frequency.setTargetAtTime(age>20?250+fade*1350:1600,t,.1);
+  a.gain.gain.setTargetAtTime(active?.19*volume*atomicAlarm(age):0,t,.08);a.tone.frequency.setTargetAtTime(hz,t,.065);a.undertone.frequency.setTargetAtTime(hz*.5,t,.065);a.filter.frequency.setTargetAtTime(age>20?250+fade*1350:1600,t,.1);
  }
  suspend(){this.atomic(null);this.aircraft(null);this.motor(false);this.pending.length=0;if(this.ctx?.state==='running')this.ctx.suspend();}
 }

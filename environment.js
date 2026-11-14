@@ -1,3 +1,4 @@
+import {atomicAlarm} from './nuclear.js';
 import * as T from './three.module.min.js';
 import {clamp} from './physics.js';
 import {obstruction,randomStream} from './navigation.js';
@@ -61,8 +62,8 @@ export function bakeNightGeometry(meshes,solids,lamps=LAMPS){
 }
 
 export class NightEnvironment{
- constructor(view){this.view=view;this.night=false;this.nightMesh=null;this.timer=0;this.pool=[];this.alarmUniforms={uAlarmMix:{value:0},uAlarmPulse:{value:1}};this.warm=new T.Color(0xffd394);this.red=new T.Color(0xff180a);
-  this.daySky=view.sky.geometry.attributes.color.array.slice();this.dayFog=view.scene.fog.color.clone();this.dayBodies=[...view.sky.children];
+ constructor(view){this.view=view;this.night=false;this.nightMesh=null;this.timer=0;this.pool=[];this.alarmUniforms={uAlarmMix:{value:0},uAlarmPulse:{value:1},uAfterImpact:{value:0}};this.warm=new T.Color(0xffd394);this.red=new T.Color(0xff0802);
+  this.daySky=view.sky.geometry.attributes.color.array.slice();this.dayFog=view.scene.fog.color.clone();this.nightFog=new T.Color(0x171e2a);this.dayBodies=[...view.sky.children];
   this.savedLights=[...view.scene.children,...view.gunScene.children].filter(o=>o.isLight).map(light=>({light,color:light.color.clone(),ground:light.groundColor?.clone(),intensity:light.intensity}));
   this.lamps=view.level.lamps||LAMPS;this.buildFixtures();this.buildNightSky();
  }
@@ -89,7 +90,7 @@ export class NightEnvironment{
   this.moon=new T.Mesh(geo,new T.MeshBasicMaterial({color:0xf2edce,side:T.DoubleSide,transparent:true,depthWrite:false,fog:false}));this.moon.position.copy(moonDir).multiplyScalar(130);this.moon.lookAt(0,0,0);this.moon.rotateZ(-.20);this.moon.renderOrder=-7;this.starsAndMoon.add(this.moon);
  }
  setMode(mode){const night=mode==='night';if(night===this.night)return;this.night=night;const v=this.view;
-  if(night&&!this.nightMesh){const geo=bakeNightGeometry(v.architecture,v.level.solids,this.lamps);this.nightMesh=new T.Mesh(geo,new T.MeshBasicMaterial({vertexColors:true}));this.nightMesh.material.onBeforeCompile=shader=>{Object.assign(shader.uniforms,this.alarmUniforms);shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nattribute vec3 nightAmbient;attribute vec3 nightLamp;uniform float uAlarmMix;uniform float uAlarmPulse;').replace('#include <color_vertex>','#include <color_vertex>\nvColor.rgb=mix(nightAmbient+nightLamp,nightAmbient+vec3(nightLamp.r*1.65,nightLamp.g*.035,nightLamp.b*.012)*uAlarmPulse,uAlarmMix);');};this.nightMesh.material.customProgramCacheKey=()=>'night-alarm-v1';v.scene.add(this.nightMesh);}
+  if(night&&!this.nightMesh){const geo=bakeNightGeometry(v.architecture,v.level.solids,this.lamps);this.nightMesh=new T.Mesh(geo,new T.MeshBasicMaterial({vertexColors:true}));this.nightMesh.material.userData.atomicBaked=true;this.nightMesh.material.onBeforeCompile=shader=>{Object.assign(shader.uniforms,this.alarmUniforms);shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nattribute vec3 nightAmbient;attribute vec3 nightLamp;uniform float uAlarmMix;uniform float uAlarmPulse;uniform float uAfterImpact;').replace('#include <color_vertex>','#include <color_vertex>\nvColor.rgb=mix(nightAmbient+nightLamp,nightAmbient*mix(.004,1.0,uAfterImpact)+vec3(nightLamp.r*2.65,nightLamp.g*.002,nightLamp.b*.0005)*uAlarmPulse,uAlarmMix);');};this.nightMesh.material.customProgramCacheKey=()=>'night-alarm-v2';v.scene.add(this.nightMesh);}
   for(const mesh of v.architecture)mesh.visible=!night;if(this.nightMesh)this.nightMesh.visible=night;
   const attribute=v.sky.geometry.attributes.color,pos=v.sky.geometry.attributes.position;
   if(night){const horizon=new T.Color(0x171e2a),top=new T.Color(0x02050c),color=new T.Color();for(let i=0;i<pos.count;i++){color.copy(horizon).lerp(top,Math.pow(clamp(pos.getY(i)/145,0,1),.55));attribute.setXYZ(i,color.r,color.g,color.b);}v.scene.fog.color.copy(horizon);}
@@ -98,7 +99,10 @@ export class NightEnvironment{
   for(const item of this.savedLights){const {light}=item;light.color.copy(night?new T.Color(0xffdeb1):item.color);if(light.groundColor)light.groundColor.copy(night?new T.Color(0x4a4541):item.ground);light.intensity=night?(light.isHemisphereLight?1.2:.65):item.intensity;}
   for(const slot of this.pool){slot.light.visible=night;slot.light.intensity=0;slot.energy=0;slot.index=slot.next=-1;}this.timer=0;
  }
- update(dt,player){if(!this.night)return;const n=this.view.match?.nuclear,active=n?.active,age=active?n.age:0,alarm=active?clamp(age/.7,0,1):0,fade=active?clamp((22-age)/2,0,1):1,pulse=active?(.08+.92*(.5-.5*Math.cos(age*Math.PI/2)))*fade:1;this.alarmUniforms.uAlarmMix.value=alarm;this.alarmUniforms.uAlarmPulse.value=pulse;this.emitMaterial.color.copy(this.warm).lerp(this.red,alarm).multiplyScalar(active?pulse:1);this.timer-=dt;
+ update(dt,player){if(!this.night)return;const n=this.view.match?.nuclear,active=n?.active,age=active?n.age:0,alarm=active?clamp(age/.7,0,1):0,pulse=active?atomicAlarm(age):1;this.alarmUniforms.uAlarmMix.value=alarm;this.alarmUniforms.uAlarmPulse.value=pulse;this.alarmUniforms.uAfterImpact.value=n?.impacted?clamp(n.impactAge/.2,0,1):0;this.emitMaterial.color.copy(this.warm).lerp(this.red,alarm).multiplyScalar(active?pulse:1);this.timer-=dt;
+  // Remove the ordinary hemisphere/directional fill during the alarm. The
+  // existing local lamps and the baked red illumination are the only strong light.
+  const fillAlarm=n?.impacted?0:alarm;for(const {light}of this.savedLights){light.color.setHex(0xffdeb1).lerp(this.red,fillAlarm);if(light.groundColor)light.groundColor.setHex(fillAlarm>.5?0x050000:0x4a4541);light.intensity=(light.isHemisphereLight?1.2:.65)*(1-.996*fillAlarm);}
   if(this.timer<=0){this.timer=.25;let first=-1,second=-1,d1=Infinity,d2=Infinity;
    for(let i=0;i<this.lamps.length;i++){const l=this.lamps[i],d=Math.hypot(player.x-l.x,player.y+1-l.y,player.z-l.z);if(d<d1){d2=d1;second=first;d1=d;first=i;}else if(d<d2){d2=d;second=i;}}
    const selected=[first,second];for(const slot of this.pool)if(selected.includes(slot.next))selected.splice(selected.indexOf(slot.next),1);else slot.next=-1;for(const slot of this.pool)if(slot.next<0)slot.next=selected.shift()??-1;

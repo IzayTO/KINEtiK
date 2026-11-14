@@ -51,8 +51,8 @@ export class SoldierBatch{
    r.pelvis.rotation.set(-clamp(r.speed*.006+r.accel*.045,-.06,.11)*(1-crouch),0,r.bank+Math.sin(r.phase)*.018*r.moving);
    r.root.rotation.z=r.death*1.4;r.root.position.y+=Math.sin(r.death*1.4)*.32;
    const twist=clamp(angleDelta(r.bodyYaw,b.yaw),-.95,.95);r.abdomen.position.y=.19-slide*.10;r.abdomen.rotation.order='YXZ';r.abdomen.rotation.set(lean,twist*.35,-r.bank*.35);
-   r.chest.rotation.y=damp(r.chest.rotation.y,twist*.65,15,dt);r.neck.rotation.y=damp(r.neck.rotation.y,clamp(angleDelta(r.bodyYaw+r.abdomen.rotation.y+r.chest.rotation.y,b.yaw),-.5,.5),21,dt);
-   r.head.rotation.x=damp(r.head.rotation.x,-lean+b.pitch*.25,18,dt);r.chest.rotation.x=-b.pitch*.25+(b.hit>0?Math.sin(b.hit*30)*.07:0);
+   r.chest.rotation.y=damp(r.chest.rotation.y,twist*.65,15,dt);r.neck.rotation.y=damp(r.neck.rotation.y,clamp(angleDelta(r.bodyYaw+r.abdomen.rotation.y+r.chest.rotation.y,b.waiting?b.waitHeadYaw:b.yaw),b.waiting?-.85:-.5,b.waiting?.85:.5),21,dt);
+   r.head.rotation.x=damp(r.head.rotation.x,-lean+(b.waiting?b.waitPitch:b.pitch*.25),18,dt);r.chest.rotation.x=-b.pitch*.25+(b.hit>0?Math.sin(b.hit*30)*.07:0);
    pelvisInverse.copy(r.pelvis.quaternion).invert();
    for(let i=0;i<2;i++){const l=r.legs[i],cycle=((r.phase/(Math.PI*2)+i*.5)%1+1)%1,duty=.58,swing=clamp((cycle-duty)/(1-duty),0,1),stride=cycle<duty?reach*(1-2*cycle/duty):-reach*Math.cos(swing*Math.PI),lift=Math.sin(swing*Math.PI)*(.08+Math.min(.13,r.speed*.012))*r.moving;
     // Sample only near a footfall, staggered between legs; visual interpolation stays per frame.
