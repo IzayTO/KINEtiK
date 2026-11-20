@@ -1,0 +1,13 @@
+{
+  "id": "./",
+  "name": "KINEtiK FPS · NODO 09",
+  "short_name": "KINEtiK",
+  "lang": "es",
+  "start_url": "./standalone.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#101824",
+  "theme_color": "#182a30",
+  "icons": [{"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}

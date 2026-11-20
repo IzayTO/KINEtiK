@@ -42,15 +42,15 @@ let fps=60,frameCount=0,frameSum=0,hudTime=0,hitTimer=0,hits=0,shots=0,playTime=
 const audio=new AudioFX(params),preferences=loadPreferences(),arsenal=new Arsenal();
 // Explicit diagnostic mode does not pretend to render a game. Normal startup always requires WebGL.
 const diagnostic=new URLSearchParams(location.search).has('qa');
-let editor,minimap,reticle,refreshV2,assistCache=null,assistTime=0,match,aimSupport,combatUI,fieldHUD,gameUI,supportUI,operationUI;
+let visorEditor,editor,minimap,reticle,refreshV2,assistCache=null,assistTime=0,match,aimSupport,combatUI,fieldHUD,gameUI,supportUI,operationUI;
 let matchConfig={...MATCH_DEFAULTS};try{const saved=JSON.parse(localStorage.getItem('kinetic-match-v3'));if(saved)Object.assign(matchConfig,saved);}catch{}
 audio.preferences=preferences;arsenal.autoReload=preferences.autoReload;
 const events=[],metrics={physicsMS:0,renderMS:0,hudMS:0,minimapMS:0,physicsSteps:0};
 
 function toast(message){$('toast').textContent=message;$('toast').style.opacity='1';clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').style.opacity='0',2200);}
-function tab(name){for(const button of document.querySelectorAll('[data-tab]'))button.classList.toggle('active',button.dataset.tab===name);for(const id of ['settings','map','controls','reticle','match','audio'])$('tab-'+id).hidden=id!==name;if(name==='map')drawMap($('pause-map'),true);}
+function tab(name){for(const button of document.querySelectorAll('[data-tab]'))button.classList.toggle('active',button.dataset.tab===name);for(const id of ['settings','map','controls','reticle','match','audio','personalization'])$('tab-'+id).hidden=id!==name;if(name==='map')drawMap($('pause-map'),true);}
 function pause(settings=false){
-  if(match?.nuclear.impacted)return;
+  if(visorEditor?.opened || match?.nuclear.impacted)return;
   if(supportUI?.opened){supportUI.close();return;}
   if(editor?.editing){editor.close(false);return;}if(!started){openOptions();return;}playing=false;input.active=false;input.clear();clock.reset();audio.suspend();
   $('resume').hidden=false;$('pause').hidden=false;$('touch-controls').hidden=true;$('hud').hidden=true;
@@ -73,7 +73,14 @@ async function start(){
   playing=true;started=true;input.active=true;input.clear();clock.reset();lastTime=performance.now();frameCount=0;frameSum=0;autoTime=0;
   $('welcome').hidden=true;$('pause').hidden=true;$('match-result').hidden=true;$('hud').hidden=false;$('touch-controls').hidden=!input.touchMode;
   // Fullscreen is optional. Safari can play directly in the normal viewport.
-  if(!diagnostic&&input.touchMode&&!document.fullscreenElement&&document.documentElement.requestFullscreen){try{await document.documentElement.requestFullscreen();}catch{}}
+  if(!diagnostic&&input.touchMode){
+    try{
+      // Fullscreen the host so the landscape frame keeps its orientation and touch coordinates.
+      const host=window.frameElement?.id==='game-frame'?parent.document:document;
+      const installed=host.defaultView.navigator.standalone||host.defaultView.matchMedia('(display-mode: standalone)').matches;
+      if(!installed&&!host.fullscreenElement)await host.documentElement.requestFullscreen?.();
+    }catch{}
+  }
 }
 function reset(){if(match?.staging||match?.nuclear.restricted)return;player.reset();input.clear();input.yaw=level.spawn.yaw;input.pitch=0;view.eye=1.67;view.landing=0;view.recoil=0;clock.reset();toast('Punto de inicio restablecido');}
 function drawMap(container,withPlayer){
@@ -107,6 +114,7 @@ function refreshSettings(){
 }
 function tick(now){
   frame=requestAnimationFrame(tick);const rawDt=Math.max(0,(now-lastTime)/1000||0),dt=Math.min(rawDt,0.1);lastTime=now;
+  if(visorEditor?.opened)return;
   let alpha=1;
   if(playing){
     const physicsStart=performance.now();let steps=0;
@@ -248,6 +256,12 @@ function setupMatchUI(){
  const fields=['map','mode','bots','difficulty','team','minutes','limit','quality','crateSeconds','environment','captureLimit','dominationLimit'];for(const key of fields){const el=$('match-'+key);el.value=String(matchConfig[key]);if(!el.value)el.value=String(MATCH_DEFAULTS[key]);}
  const refresh=()=>{const mode=$('match-mode').value;$('elimination-limit-field').firstChild.textContent=mode==='confirmed'?'Límite de confirmaciones':'Límite de eliminaciones';$('capture-limit-field').hidden=mode!=='ctf';$('domination-limit-field').hidden=mode!=='domination';$('elimination-limit-field').hidden=['ctf','domination'].includes(mode);$('match-team').disabled=$('match-mode').value==='ffa';const n=+$('match-bots').value;$('bot-count-label').textContent=n;$('bot-warning').textContent=n>=12?n+' bots · Mayor carga de CPU. Reduce la cantidad o usa IA adaptativa si baja la fluidez.':n+' bots · Perfiles y percepción activos.';};$('match-bots').oninput=refresh;$('match-mode').onchange=()=>{refresh();for(const b of document.querySelectorAll('[data-pick-mode]'))b.classList.toggle('selected',b.dataset.pickMode===$('match-mode').value);};refresh();
  for(const b of document.querySelectorAll('[data-pick-mode]'))b.onclick=()=>{$('match-mode').value=b.dataset.pickMode;$('match-mode').onchange();$('match-config').hidden=false;};
+ $('open-visor').onclick=async()=>{
+  const button=$('open-visor');button.disabled=true;
+  try{if(!visorEditor){const {VisorEditor}=await import('./visor-editor.js');visorEditor=new VisorEditor();}visorEditor.open();}
+  catch(error){toast('No se pudo abrir el editor de visor.');console.error(error);}
+  finally{button.disabled=false;}
+ };
  $('home-options').onclick=openOptions;$('options-home').onclick=home;
  const read=()=>{for(const key of fields){const val=$('match-'+key).value;matchConfig[key]=typeof MATCH_DEFAULTS[key]==='number'?+val:val;}try{localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));}catch{}return matchConfig;};
  $('map-select').value=matchConfig.map;const mapChoice=e=>{matchConfig.map=e.target.value;$('match-map').value=$('map-select').value=matchConfig.map;try{localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));}catch{}};$('map-select').onchange=$('match-map').onchange=mapChoice;$('map-play').onclick=()=>{beginSimulation(read());start();};
@@ -263,7 +277,7 @@ try{
   editor=new HUDEditor({touch:input.touchMode,onClose:({save,persisted})=>{gameUI.releaseCapture();input.clear();clock.reset();$('pause').hidden=false;$('touch-controls').hidden=true;$('hud').hidden=true;tab('controls');if(save)toast(persisted?'Distribución guardada':'Aplicada en esta sesión; almacenamiento no disponible');}});
   combatUI=new CombatUI(match,view,input,preferences,()=>playing&&!editor.editing&&!match.staging&&!match.nuclear.restricted&&match.player.alive&&!match.remote.engaged&&!supportUI?.opened,toast);
   fieldHUD=new FieldHUD(match,view,input);gameUI=new GameInterface(view,match,input);operationUI=new OperationUI(match,input);
-  minimap=new Minimap($('minimap-canvas'),level);supportUI=new SupportUI(match,view,input,minimap,()=>playing,()=>{audio.unlock();Promise.resolve(audio.ctx?.resume()).then(()=>processMatchEvents());});reticle=new Reticle($('reticle'),preferences);refreshV2=setupV2Settings(preferences,()=>reticle.update(0,view.camera.fov,innerHeight));
+  minimap=new Minimap($('minimap-canvas'),level);supportUI=new SupportUI(match,view,input,minimap,()=>playing,()=>{audio.unlock();Promise.resolve(audio.ctx?.resume()).then(()=>processMatchEvents());});reticle=new Reticle($('reticle'),preferences);refreshV2=setupV2Settings(preferences,()=>{minimap.shape=preferences.mapShape;minimap.last=-Infinity;reticle.update(0,view.camera.fov,innerHeight);});
   $('customize-hud').onclick=()=>{gameUI.capture();playing=false;input.active=false;input.clear();clock.reset();$('pause').hidden=true;$('hud').hidden=false;$('touch-controls').hidden=false;editor.begin();};
   $('reset-targets').onclick=()=>{beginSimulation();toast('Partida reiniciada');};
   setupMatchUI();
@@ -297,5 +311,6 @@ try{
 
 // Optional offline cache; a failed/unsupported cache never blocks the playable.
 if(!diagnostic&&'serviceWorker' in navigator&&location.protocol==='https:'){
- window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js',{scope:'./',updateViaCache:'none'}).catch(()=>{}),{once:true});
+ const register=()=>navigator.serviceWorker.register('./sw.js',{scope:'./',updateViaCache:'none'}).catch(()=>{});
+ if(document.readyState==='complete')register();else window.addEventListener('load',register,{once:true});
 }

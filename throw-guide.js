@@ -1,5 +1,4 @@
 import * as T from './three.module.min.js';
-import {TRAJECTORY_POINTS} from './ordnance.js';
 
 // The hand and the level are drawn with different cameras. Join the visible
 // shoulder of the held prop to the predicted flight in the world camera's view.
@@ -8,8 +7,7 @@ const RELEASE_POINTS = {
   molotov: new T.Vector3(-.020, .232, -.008),
   gas: new T.Vector3(-.036, .143, -.008)
 };
-const JOIN_LENGTH = 6;
-const CAPACITY = TRAJECTORY_POINTS + 40;
+const CAPACITY = 96;
 
 function makeRibbon() {
   const geometry = new T.BufferGeometry();
@@ -54,11 +52,11 @@ export class ThrowGuide extends T.Mesh {
     this.visible = false;
     this.frustumCulled = false;
     this.renderOrder = 1000;
-    this.offset = new T.Vector3();
-    this.previousPoint = new T.Vector3();
-    this.nextPoint = new T.Vector3();
-    this.clipA = new T.Vector3();
-    this.clipB = new T.Vector3();
+    this.hand = new T.Vector3();
+    this.end = new T.Vector3();
+    this.viewPoint = new T.Vector3();
+    this.previousPoint = new T.Vector2();
+    this.nextPoint = new T.Vector2();
   }
 
   update(points, kind, item, worldCamera, handCamera, width, height) {
@@ -66,53 +64,56 @@ export class ThrowGuide extends T.Mesh {
     if (points.length < 2 || width <= 0 || height <= 0) return;
     item.updateWorldMatrix(true, false);
     handCamera.updateWorldMatrix(true, false);
-    const anchor = this.offset.copy(RELEASE_POINTS[kind]).applyMatrix4(item.matrixWorld).applyMatrix4(handCamera.matrixWorldInverse);
-    const depth = Math.max(worldCamera.near * 2, -anchor.z);
-    anchor.applyMatrix4(handCamera.projectionMatrix);
-    const projection = worldCamera.projectionMatrix.elements;
-    anchor.set((anchor.x + projection[8]) * depth / projection[0],
-               (anchor.y + projection[9]) * depth / projection[5], -depth);
-    this.previousPoint.copy(anchor);
-    this.offset.sub(this.nextPoint.copy(points[0]).applyMatrix4(worldCamera.matrixWorldInverse));
+    const hand = this.hand.copy(RELEASE_POINTS[kind]).applyMatrix4(item.matrixWorld).project(handCamera);
+    const first = points[0], last = points[points.length - 1];
+    const end = this.end.copy(last).applyMatrix4(worldCamera.matrixWorldInverse);
+    const near = -worldCamera.near * 1.01;
 
-    let joinLength = 0;
-    for (let i = 1; i < points.length && joinLength < JOIN_LENGTH; i++) {
-      joinLength += this.nextPoint.copy(points[i]).distanceTo(points[i-1]);
+    // An overhead throw can land behind the camera. Follow the last visible leg
+    // to the near plane instead of projecting a point behind the viewer.
+    if (end.z >= near) {
+      let i = points.length - 2;
+      while (i >= 0 && this.viewPoint.copy(points[i]).applyMatrix4(worldCamera.matrixWorldInverse).z >= near) i--;
+      if (i < 0) return;
+      end.copy(points[i + 1]).applyMatrix4(worldCamera.matrixWorldInverse);
+      end.lerp(this.viewPoint, (near - end.z) / (this.viewPoint.z - end.z));
     }
-    joinLength = Math.max(.00001, Math.min(joinLength, JOIN_LENGTH));
-
+    end.applyMatrix4(worldCamera.projectionMatrix);
+    // Preserve the direction to offscreen impacts, even close to the near plane.
+    const scale = Math.max(1, Math.abs(end.x) / 3, Math.abs(end.y) / 3);
+    end.x /= scale; end.y /= scale;
+    const range = Math.hypot(last.x - first.x, last.z - first.z);
+    let bow = 0;
+    if (range > .001) {
+      for (const point of points) {
+        const t = Math.hypot(point.x - first.x, point.z - first.z) / range;
+        bow = Math.max(bow, point.y - first.y - (last.y - first.y) * t);
+      }
+    }
+    // Physical samples set the altitude of this screen-space arc. Spreading the
+    // hand-camera offset over the entire flight prevents a vertical seam at the apex.
+    const span = Math.abs(end.x - hand.x) * width / 2;
+    const liftPixels = Math.min(height * .43, (span * .38 + height * .76 * bow / Math.max(5, range))
+      * Math.min(1, range / 8) * Math.min(1, bow / .6));
+    const lift = 2 * liftPixels / height;
     this.segments = 0;
     this.pixelDistance = 0;
     this.material.uniforms.pixelScale.value = T.MathUtils.clamp(Math.min(width, height) / 420, .95, 1.5);
-    let travelled = 0;
-    for (let i = 1; i < points.length; i++) {
-      const from = points[i-1], to = points[i];
-      const length = this.nextPoint.copy(to).distanceTo(from);
-      // Extra samples here only affect presentation. There is no extra collision query.
-      const steps = travelled < 3 ? Math.min(6, Math.max(1, Math.ceil(length / .16))) : 1;
-      for (let step = 1; step <= steps; step++) {
-        const t = step / steps;
-        const u = Math.min(1, (travelled + length * t) / joinLength);
-        const weight = i === points.length-1 && step === steps ? 0 : (1-u)*(1-u)*(1+2*u);
-        this.nextPoint.lerpVectors(from, to, t).applyMatrix4(worldCamera.matrixWorldInverse).addScaledVector(this.offset, weight);
-        this.writeSegment(this.previousPoint, this.nextPoint, worldCamera, width, height);
-        this.previousPoint.copy(this.nextPoint);
-      }
-      travelled += length;
+    this.previousPoint.set(hand.x, hand.y);
+    const steps = Math.max(12, Math.min(CAPACITY, Math.ceil((span + liftPixels*2 + Math.abs(end.y-hand.y)*height*.5) / 8)));
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const lateral = t * (1.65 - .65*t);
+      this.nextPoint.set(hand.x + (end.x-hand.x)*lateral, hand.y + (end.y-hand.y)*t + 4*t*(1-t)*lift);
+      this.writeSegment(this.previousPoint, this.nextPoint, width, height);
+      this.previousPoint.copy(this.nextPoint);
     }
     this.geometry.setDrawRange(0, this.segments * 6);
     this.geometry.attributes.position.needsUpdate = true;
     this.geometry.attributes.uv.needsUpdate = true;
   }
 
-  writeSegment(from, to, camera, width, height) {
-    const near = -camera.near;
-    if (from.z >= near && to.z >= near) return;
-    const a = this.clipA.copy(from), b = this.clipB.copy(to);
-    if (a.z > near) a.lerp(to, (near - from.z) / (to.z - from.z));
-    if (b.z > near) b.lerp(from, (near - to.z) / (from.z - to.z));
-    a.applyMatrix4(camera.projectionMatrix);
-    b.applyMatrix4(camera.projectionMatrix);
+  writeSegment(a, b, width, height) {
     const dx = (b.x-a.x)*width*.5, dy = (b.y-a.y)*height*.5, length = Math.hypot(dx,dy);
     if (length < .015 || this.segments >= CAPACITY) return;
     const halfWidth = 2.25 * this.material.uniforms.pixelScale.value;
