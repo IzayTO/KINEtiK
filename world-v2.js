@@ -4,6 +4,7 @@ import {clamp,horizontalToVertical,CollisionWorld} from './physics.js';
 import {buildModels,aimTransform,segment} from './weapon-models.js';
 import {damageFor,knifePose} from './combat.js';
 const zero=new T.Vector2(),up=new T.Vector3(0,1,0),down=new T.Vector3(0,-1,0);
+const knifeElbow=new T.Vector3(),knifeShoulder=new T.Vector3(.30,-.29,.50);
 export class V2World extends WorldView{
  constructor(canvas,level,params,options={}){
   super(canvas,level,params,options);this.collisionWorld=new CollisionWorld(level.solids);
@@ -50,9 +51,11 @@ export class V2World extends WorldView{
    const q=a?.reload?a.reloadProgress:0;m.shell.visible=!!a?.reload;m.shell.position.y=-.21+q*.12;this.arms[1].rotation.x=-Math.sin(q*Math.PI)*.3;this.rig.rotation.z-=Math.sin(q*Math.PI)*.13;
   }else this.arms[1].position.z=0;
   if(selected===0){const attack=a?.attack,t=attack?clamp((a.time-attack.start)/attack.duration,0,1):0,pose=attack?knifePose(attack.combo,t):[0,0,0];
-   this.rig.position.set(.17+Math.sin(this.phase*1.1)*.018*this.bob*this.params.cameraMotion,-.12+Math.cos(this.phase*2)*.014*this.bob*this.params.cameraMotion-this.poseSlide*.045+this.landing*.3-this.jumpKick*.02,-.72+this.recoil*.015);this.rig.rotation.set(.10*this.poseSlide+clamp(p.vy,-10,10)*.003*this.params.cameraMotion,.08*this.poseSprint,.11*this.poseSprint);
-   m.wrist.position.set(pose[0],pose[1],pose[2]);m.wrist.rotation.set(attack?Math.sin(t*Math.PI)*.8:0,attack?(attack.combo===1?-1:1)*Math.sin(t*Math.PI)*1.0:0,.25+pose[0]*1.8);
-   const hand=m.wrist.position,elbow=new T.Vector3(.16+pose[0]*.3,-.16+pose[1]*.4,.22+pose[2]*.2),shoulder=new T.Vector3(.30,-.29,.50);segment(m.fore,hand,elbow);segment(m.upper,elbow,shoulder);
+   this.rig.position.set(.16+Math.sin(this.phase*1.1)*.018*this.bob*this.params.cameraMotion,-.157+Math.cos(this.phase*2)*.014*this.bob*this.params.cameraMotion-this.poseSlide*.045+this.landing*.3-this.jumpKick*.02,-.775+this.recoil*.015);this.rig.rotation.set(.10*this.poseSlide+clamp(p.vy,-10,10)*.003*this.params.cameraMotion,.08*this.poseSprint,.11*this.poseSprint);
+   m.wrist.position.set(pose[0],pose[1],pose[2]);m.wrist.rotation.set(attack?Math.sin(t*Math.PI)*.8:0,attack?(attack.combo===1?-1:1)*Math.sin(t*Math.PI)*1.0:0,-.035+pose[0]*1.8);
+   m.leftHand.position.set(-.43-pose[0]*.13,-.047-Math.abs(pose[1])*.12,-.014+Math.abs(pose[2])*.14);
+   knifeElbow.set(.16+pose[0]*.3,-.16+pose[1]*.4,.22+pose[2]*.2);
+   segment(m.fore,m.wrist.position,knifeElbow);segment(m.upper,knifeElbow,knifeShoulder);
   }
   this.rig.updateMatrixWorld(true);this.updateTargets(dt);if(this.pingPosition){this.pingAge+=dt;this.pingMesh.scale.setScalar(1+Math.max(0,1-this.pingAge*3)*.8);}
  }

@@ -4,9 +4,17 @@ import {floorAt,projectileTrace} from './ordnance.js';
 export const ATOMIC_KILLS=41,ALARM_SECONDS=20,FADE_SECONDS=2,ATOMIC_PULSES=5;
 export const ATOMIC_DEATHS=['DEMASIADO URANIO-235','SE ROMPIÓ TU ENLACE','FISIÓN: FIN DE SESIÓN','TU DOSIS SUPERÓ EL LÍMITE','QUEDASTE FUERA DEL ESPECTRO','LA REACCIÓN FUE EN CADENA','TU SEÑAL SE DESINTEGRÓ','NÚCLEO INESTABLE'];
 const smooth=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
-// Shared envelope: two seconds of siren/light, two seconds of darkness.
-// Rendering and audio use the same simulation clock, including the final fade.
-export function atomicAlarm(age){const phase=((age%4)+4)%4,fade=clamp((22-age)/2,0,1);return smooth(phase/.22)*(1-smooth((phase-1.65)/.30))*fade;}
+const ALARM_LIT = 2, ALARM_DARK = 0.5;
+export function atomicAlarmPhase(age) {
+ return Math.max(0, age) % (ALARM_LIT + ALARM_DARK);
+}
+// The lamps and the siren share both soft edges and the half-second blackout.
+export function atomicAlarm(age) {
+ const phase = atomicAlarmPhase(age);
+ if (phase >= ALARM_LIT) return 0;
+ const fade = clamp((ALARM_SECONDS + FADE_SECONDS - age) / FADE_SECONDS, 0, 1);
+ return smooth(phase / .22) * smooth((ALARM_LIT - phase) / .30) * fade;
+}
 export function atomicExposure(n,night){if(!n?.active)return{dark:1,red:0,pulse:0,sky:0,glow:0};const blast=n.impactAge,hit=n.impacted,nightFade=smooth((n.age-20)/2),recover=hit?smooth((blast-1.6)/5.8):0;return{
  dark:night?1-.9*nightFade:hit?.1+.9*recover:1,
  red:night&&!hit?smooth(n.age/.7):0,pulse:night?atomicAlarm(n.age):0,

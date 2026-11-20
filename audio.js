@@ -1,4 +1,4 @@
-import {atomicAlarm} from './nuclear.js';
+import {atomicAlarm,atomicAlarmPhase} from './nuclear.js';
 import {createAudioBank,BANK_SECONDS} from './audio-bank.js';
 // Original procedural sounds. Distance culling, priority stealing and bounded voices.
 const PRESETS={
@@ -35,8 +35,11 @@ export class AudioFX{
  }
  atomic(operation){if(!this.ctx||!this.master)return;const ctx=this.ctx,t=ctx.currentTime,active=operation?.active&&operation.age<22;
   if(active&&!this.atomicAlarm){const tone=ctx.createOscillator(),undertone=ctx.createOscillator(),filter=ctx.createBiquadFilter(),gain=ctx.createGain(),mix=ctx.createGain();tone.type='triangle';undertone.type='sine';filter.type='lowpass';filter.frequency.value=1600;mix.gain.value=.35;gain.gain.value=0;tone.connect(filter);undertone.connect(mix);mix.connect(filter);filter.connect(gain);gain.connect(this.master);tone.start();undertone.start();this.atomicAlarm={tone,undertone,filter,gain,mix};}
-  const a=this.atomicAlarm;if(!a)return;const age=operation?.age||0,fade=active?Math.max(0,Math.min(1,(22-age)/2)):0,volume=(this.preferences.volumeEffects??.8)*(this.params.sound?1:0),sweep=.5-.5*Math.cos(age*Math.PI),hz=(650+sweep*430)*(age>20?.20+.80*fade:1);
-  a.gain.gain.setTargetAtTime(active?.19*volume*atomicAlarm(age):0,t,.08);a.tone.frequency.setTargetAtTime(hz,t,.065);a.undertone.frequency.setTargetAtTime(hz*.5,t,.065);a.filter.frequency.setTargetAtTime(age>20?250+fade*1350:1600,t,.1);
+  const a=this.atomicAlarm;if(!a)return;const age=operation?.age||0,fade=active?Math.max(0,Math.min(1,(22-age)/2)):0,volume=(this.preferences.volumeEffects??.8)*(this.params.sound?1:0),sweep=.5-.5*Math.cos(atomicAlarmPhase(age)*Math.PI),hz=(650+sweep*430)*(age>20?.20+.80*fade:1);
+  const envelope=active?atomicAlarm(age):0;
+  if(envelope>0)a.gain.gain.setTargetAtTime(.19*volume*envelope,t,.012);
+  else a.gain.gain.setValueAtTime(0,t);
+  a.tone.frequency.setTargetAtTime(hz,t,.065);a.undertone.frequency.setTargetAtTime(hz*.5,t,.065);a.filter.frequency.setTargetAtTime(age>20?250+fade*1350:1600,t,.1);
  }
  suspend(){this.atomic(null);this.aircraft(null);this.motor(false);this.pending.length=0;if(this.ctx?.state==='running')this.ctx.suspend();}
 }

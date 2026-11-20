@@ -7,7 +7,7 @@ const $=id=>document.getElementById(id),teamColor=t=>t==='blue'?'#69c2ff':t==='r
 export class FieldHUD{
  constructor(match,view,input){Object.assign(this,{match,view,input});this.vector=new T.Vector3();this.numberIndex=0;this.sequence=0;this.timer=0;this.numbers=Array.from({length:128},()=>{const el=document.createElement('span');el.className='damage-number';el.hidden=true;$('damage-numbers').append(el);return{el,start:-100};});this.directions=Array.from({length:8},()=>{const el=document.createElement('i');el.hidden=true;$('damage-direction').append(el);return{el,start:-100,x:0,z:0};});this.directionIndex=0;
  this.worldLabels=Array.from({length:4},()=>{const el=document.createElement('div');el.className='objective-label';el.innerHTML='<b></b><span></span><i><em></em></i>';el.hidden=true;$('objective-markers').append(el);return el;});
- for(const [id,model]of [['slot-knife',view.models[0].wrist],['slot-rifle',view.models[1].root],['slot-shotgun',view.models[2].root],...['grenade','molotov','gas','antidote','rocket'].map(k=>['slot-'+k,itemModel(k)])]){const el=$(id);el.querySelector('img').src=modelThumbnail(model);}
+ for(const [id,model]of [['slot-knife',view.models[0].item],['slot-rifle',view.models[1].root],['slot-shotgun',view.models[2].root],...['grenade','molotov','gas','antidote','rocket'].map(k=>['slot-'+k,itemModel(k)])]){const el=$(id);el.querySelector('img').src=modelThumbnail(model);}
  this.map=document.createElement('canvas');this.map.width=this.map.height=240;this.map.className='objective-map';$('minimap').append(this.map);this.ctx=this.map.getContext('2d');
  }
  reset(){for(const n of this.numbers){n.start=-100;n.el.hidden=true;}for(const d of this.directions){d.start=-100;d.el.hidden=true;}this.timer=0;}

@@ -8,15 +8,40 @@ export function itemGeometry(kind){if(kind==='rocket'||kind==='rocket-projectile
  if(kind==='grenade'){add(new T.IcosahedronGeometry(.095,1),0x596747,0,0,0,1,1.35,1);for(const y of [-.06,0,.06])tube(0x293c37,0,y,0,.096,.096,.009);tube(0xb3bba4,0,.14,0,.035,.045,.05);box(0x263a39,.045,.09,0,.025,.20,.05);add(new T.TorusGeometry(.035,.006,4,10),0xc1c5ae,-.03,.17,0);}
  if(kind==='molotov'){tube(0x68754c,0,-.02,0,.065,.073,.23);tube(0x737e52,0,.12,0,.025,.065,.07);tube(0x8c9869,0,.19,0,.025,.025,.09);box(0xb3a781,0,-.025,-.069,.09,.10,.008);box(0x594d3e,0,.23,0,.042,.04,.035);add(new T.BoxGeometry(.036,.13,.02),0xe0bd77,.025,.285,0,1,1,1,-.4);}
  if(kind==='gas'){tube(0x788d54,0,0,0,.07,.085,.19);tube(0xc7cfa1,0,.115,0,.044,.070,.04);tube(0x384a3b,0,.15,0,.04,.04,.04);box(0xe2cf69,0,-.01,-.083,.11,.09,.012);box(0x394a39,0,-.01,-.092,.065,.018,.009);box(0x394a39,-.025,-.01,-.095,.012,.065,.01);}
- if(kind==='antidote'){tube(0xd1e2d7,0,0,0,.025,.025,.20);tube(0x7ad5c6,0,-.01,0,.026,.026,.07);tube(0x405a60,0,.14,0,.009,.009,.09);box(0x69c8bf,0,.19,0,.085,.022,.04);box(0xbcd0c4,0,.075,0,.105,.013,.035);tube(0xa1afb2,0,-.15,0,.003,.009,.09);}
+ if(kind==='antidote'){
+  // Opaque facets suggest glass and a visible liquid level with a single material.
+  const ice=0xcbdcdd, collar=0x506471, fluid=0x62c7bd, ink=0x29495a;
+  tube(ice,0,.004,0,.032,.030,.166);
+  tube(fluid,0,-.018,0,.0328,.0317,.098);
+  tube(0xa7e0d8,0,.030,0,.033,.033,.007);
+  for(const x of [-.026,.026])box(ice,x,.002,.017,.008,.150,.022);
+  for(let i=0;i<5;i++)box(ink,-.005,-.051+i*.024,.0326,i%2?.011:.020,.003,.002);
+  tube(collar,0,-.086,0,.032,.018,.027);
+  tube(0x89aaa9,0,-.109,0,.017,.008,.024);
+  tube(0xc6d1d4,0,-.150,0,.0045,.001,.071);
+  tube(collar,0,.087,0,.034,.034,.018);
+  box(ice,0,.099,0,.105,.014,.042);
+  for(const x of [-.047,.047])box(collar,x,.099,0,.013,.016,.043);
+  tube(0x93a5ac,0,.144,0,.010,.010,.080);
+  tube(ink,0,.178,0,.019,.010,.015);
+  add(new T.CylinderGeometry(.040,.035,.017,12),fluid,0,.192,0,1,1,.73);
+  box(ice,0,.202,0,.030,.002,.007);
+  box(ice,0,.203,0,.007,.002,.026);
+ }
  const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(positions,3));g.setAttribute('color',new T.Float32BufferAttribute(colors,3));g.computeVertexNormals();g.computeBoundingSphere();cache.set(kind,g);return g;
 }
 export function itemModel(kind){return new T.Mesh(itemGeometry(kind),material);}
 // One-time CPU projection of the actual model triangles, cached as a small image.
 // No extra WebGL context, scene camera, network texture or per-frame thumbnail pass.
-export function modelThumbnail(root){root.updateMatrixWorld(true);const inv=root.matrixWorld.clone().invert(),tri=[],matrix=new T.Matrix4(),v=new T.Vector3(),co=new T.Color();let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
- root.traverse(o=>{if(!o.isMesh||!o.visible)return;for(let p=o.parent;p&&p!==root;p=p.parent)if(!p.visible)return;matrix.multiplyMatrices(inv,o.matrixWorld);const g=o.geometry,p=g.attributes.position,c=g.attributes.color,idx=g.index,n=idx?idx.count:p.count;
-  for(let i=0;i<n;i+=3){const pts=[];let depth=0;for(let j=0;j<3;j++){const k=idx?idx.getX(i+j):i+j;v.fromBufferAttribute(p,k).applyMatrix4(matrix);const x=-v.z+.13*v.x,y=v.y,X=x*.866-y*.5,Y=x*.5+y*.866;minX=Math.min(minX,X);maxX=Math.max(maxX,X);minY=Math.min(minY,Y);maxY=Math.max(maxY,Y);depth+=v.x;pts.push([X,Y]);}if(c)co.setRGB(c.getX(idx?idx.getX(i):i),c.getY(idx?idx.getX(i):i),c.getZ(idx?idx.getX(i):i));else co.copy(o.material.color);co.multiplyScalar(.78+.12*((i/3)%3));tri.push({pts,depth,color:co.getStyle()});}
+export function modelThumbnail(root){root.updateWorldMatrix(true,true);
+ const inv=root.matrixWorld.clone().invert(),tri=[],matrix=new T.Matrix4(),v=new T.Vector3(),co=new T.Color();
+ const normals=new T.Matrix3(),normal=new T.Vector3(),light=new T.Vector3(.72,.80,-.38).normalize();let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+ root.traverse(o=>{if(!o.isMesh||!o.visible)return;
+  // The inventory can photograph a held mesh even when its world parent is unequipped.
+  if(o!==root){for(let p=o.parent;p&&p!==root;p=p.parent)if(!p.visible)return;}
+  matrix.multiplyMatrices(inv,o.matrixWorld);normals.getNormalMatrix(matrix);
+  const g=o.geometry,p=g.attributes.position,c=g.attributes.color,idx=g.index,n=idx?idx.count:p.count;
+  for(let i=0;i<n;i+=3){const pts=[];let depth=0;for(let j=0;j<3;j++){const k=idx?idx.getX(i+j):i+j;v.fromBufferAttribute(p,k).applyMatrix4(matrix);const x=-v.z+.13*v.x,y=v.y,X=x*.866-y*.5,Y=x*.5+y*.866;minX=Math.min(minX,X);maxX=Math.max(maxX,X);minY=Math.min(minY,Y);maxY=Math.max(maxY,Y);depth+=v.x;pts.push([X,Y]);}if(c)co.setRGB(c.getX(idx?idx.getX(i):i),c.getY(idx?idx.getX(i):i),c.getZ(idx?idx.getX(i):i));else co.copy(o.material.color);const shade=g.attributes.normal?Math.max(0,normal.fromBufferAttribute(g.attributes.normal,idx?idx.getX(i):i).applyNormalMatrix(normals).dot(light)):.6;co.multiplyScalar(.70+.38*shade);tri.push({pts,depth,color:co.getStyle()});}
  });
  const canvas=document.createElement('canvas');canvas.width=192;canvas.height=128;const ctx=canvas.getContext('2d'),scale=Math.min(174/Math.max(.01,maxX-minX),112/Math.max(.01,maxY-minY));tri.sort((a,b)=>a.depth-b.depth);for(const t of tri){ctx.fillStyle=t.color;ctx.beginPath();t.pts.forEach(([x,y],i)=>{const X=96+(x-(minX+maxX)/2)*scale,Y=64-(y-(minY+maxY)/2)*scale;i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);});ctx.closePath();ctx.fill();}return canvas.toDataURL('image/png');
 }

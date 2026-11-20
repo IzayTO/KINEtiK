@@ -44,7 +44,20 @@ export function runV3Checks(){const results=[],test=(name,fn)=>{try{const detail
  test('Cuchillo · Radio circular en diagonal',()=>{const b=reset();b.body.x=30+2.7/Math.sqrt(2);b.body.z=35+2.7/Math.sqrt(2);assert(m.meleeTarget(m.player)===b,'Radio no circular');b.body.x+=.08;assert(!m.meleeTarget(m.player),'Sobrepasa 2.7');});
  test('S-07 · Bombeo emite un evento por disparo',()=>{const a=new Arsenal();a.select(2);let shots=0,pumps=0;stepArsenal(a,4,{fire:true},{},e=>{shots+=e.type==='shot';pumps+=e.type==='pump';});assert(pumps>2&&Math.abs(shots-pumps)<=1,'Sin secuencia de bombeo');});
  test('Modelo · S-07 no contiene miras superiores',()=>{const v=new V3World(null,level,{...DEFAULTS},{render:false}),root=v.models[2].root;root.updateMatrixWorld(true);let highest=-Infinity;root.traverse(o=>{if(!o.isMesh||!o.visible)return;const a=o.geometry.attributes.position;for(let i=0;i<a.count;i++){const q=v.dir.clone().fromBufferAttribute(a,i).applyMatrix4(o.matrixWorld);if(q.z<.08&&q.z>-.9)highest=Math.max(highest,q.y);}});assert(highest<.1,'Mira o saliente superior: '+highest);});
- test('Modelo · Hoja 3D hacia atrás y al lateral',()=>{const v=new V3World(null,level,{...DEFAULTS},{render:false}),k=v.models[0];k.root.updateMatrixWorld(true);const tip=k.bladeTip.getWorldPosition(v.dir.clone());assert(tip.z>.25&&tip.x>.2,'Hoja incorrectamente orientada');let thickness=0;k.wrist.traverse(o=>{if(o.isMesh&&o.material.color.getHex()===0xb6c5bf){o.geometry.computeBoundingBox();thickness=o.geometry.boundingBox.max.y-o.geometry.boundingBox.min.y;}});assert(thickness>.03,'Hoja plana');});
+ test('Modelo · Hoja 3D hacia atrás y al lateral',()=>{
+  const v=new V3World(null,level,{...DEFAULTS},{render:false}),k=v.models[0];
+  k.root.updateMatrixWorld(true);
+  const tip=k.bladeTip.getWorldPosition(v.dir.clone());
+  assert(tip.z>.25&&tip.x>.2,'Hoja incorrectamente orientada');
+  const positions=k.item.geometry.getAttribute('position');
+  let left=Infinity,right=-Infinity;
+  for(let i=0;i<positions.count;i++){
+   // El tramo entre el mango y la punta mide el espesor de la hoja, sin contar el guante.
+   if(positions.getZ(i)>-.12||positions.getZ(i)<-.24)continue;
+   left=Math.min(left,positions.getX(i));right=Math.max(right,positions.getX(i));
+  }
+  assert(right-left>.008,'Hoja plana');
+ });
  test('Modelo · Posturas bajas corresponden a la colisión',()=>{m.start({bots:1});const v=new V3World(null,level,{...DEFAULTS},{render:false});v.attachMatch(m);const b=m.bots[0];b.body.reset({x:0,y:0,z:0});b.yaw=b.bodyYaw=0;const matrix=v.camera.matrix.clone();for(const height of [1.02,.76]){b.body.height=height;b.body.sliding=height<1;for(let i=0;i<60;i++)v.soldiers.update(1/60,1,i/60);let high=0,low=10;for(const batch of v.soldiers.batches){const a=batch.mesh.geometry.attributes.position;for(const part of batch.parts){batch.mesh.getMatrixAt(part.index,matrix);if(Math.abs(matrix.determinant())<1e-10)continue;for(let i=0;i<a.count;i++){const q=v.dir.clone().fromBufferAttribute(a,i).applyMatrix4(matrix);high=Math.max(high,q.y);low=Math.min(low,q.y);}}}assert(high<height+.04&&low>-.03,'Cuerpo fuera de postura: '+[low,high,height]);}v.soldiers.dispose();});
  test('Navegación · Posición elevada accesible con línea de visión',()=>{const n=m.nav.overwatch({x:0,y:0,z:20},{x:10,y:0,z:12},20);assert(n&&n.y>1.4,'No encuentra altura');assert(m.nav.path({x:0,y:0,z:20},n).length>0,'Altura inaccesible');return n.y+' m';});
 

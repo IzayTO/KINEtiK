@@ -1,19 +1,24 @@
 import {FieldEffects} from './field-effects.js';
 import * as T from './three.module.min.js';
 import {itemGeometry,itemModel} from './field-models.js';
-import {trajectory,PROJECTILE_LIMIT,TRAJECTORY_POINTS} from './ordnance.js';
+import {trajectory,PROJECTILE_LIMIT} from './ordnance.js';
+import {ThrowGuide} from './throw-guide.js';
+import {gripGloveGeometry} from './talon-model.js';
 import {clamp} from './physics.js';
 import {segment} from './weapon-models.js';
 const kinds=['grenade','molotov','gas','antidote','rocket'];
 export class FieldView{
  constructor(view){this.view=view;this.matrix=new T.Matrix4();this.temp=new T.Object3D();this.color=new T.Color();this.right=new T.Vector3();this.up=new T.Vector3();this.itemMaterial=new T.MeshLambertMaterial({vertexColors:true});this.projectileBatches=kinds.map(kind=>{const mesh=new T.InstancedMesh(itemGeometry(kind==='rocket'?'rocket-projectile':kind),this.itemMaterial,PROJECTILE_LIMIT+20);mesh.count=0;mesh.frustumCulled=false;mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);view.scene.add(mesh);return mesh;});
   this.effects=new FieldEffects(view);
-  this.previewGeometry=new T.BufferGeometry();this.previewGeometry.setAttribute('position',new T.BufferAttribute(new Float32Array(TRAJECTORY_POINTS*3),3).setUsage(T.DynamicDrawUsage));this.preview=new T.Points(this.previewGeometry,new T.PointsMaterial({color:0xb7f7da,size:3,sizeAttenuation:false,depthWrite:false}));this.preview.frustumCulled=false;view.scene.add(this.preview);
+  this.preview=new ThrowGuide();view.scene.add(this.preview);
+  this.prediction=null;
   this.landingMarker=new T.Mesh(new T.RingGeometry(.25,.29,32),new T.MeshBasicMaterial({color:0xb7f7da,transparent:true,opacity:.8,side:T.DoubleSide,depthWrite:false}));view.scene.add(this.landingMarker);this.landingMarker.visible=false;this.landingNormal=new T.Vector3();this.markerAxis=new T.Vector3(0,0,1);
   this.hand=new T.Group();view.gunScene.add(this.hand);this.wrist=new T.Group();this.hand.add(this.wrist);this.handItems=Object.fromEntries(kinds.map(k=>{const mesh=itemModel(k);this.wrist.add(mesh);return[k,mesh];}));const mat=new T.MeshLambertMaterial({color:0x897f61});this.fore=new T.Mesh(new T.BoxGeometry(.085,1,.10),mat);this.upper=new T.Mesh(new T.BoxGeometry(.12,1,.13),mat);this.glove=new T.Mesh(new T.BoxGeometry(.10,.09,.11),new T.MeshLambertMaterial({color:0x304c50}));this.wrist.add(this.glove);this.glove.position.y=-.065;this.hand.add(this.fore,this.upper);
+  this.grip=new T.Mesh(gripGloveGeometry(),new T.MeshLambertMaterial({vertexColors:true}));
+  this.wrist.add(this.grip);this.grip.visible=false;this.palmPoint=new T.Vector3();
   this.rings=[];this.flags=[];this.match=null;this.elbowPoint=new T.Vector3(.13,-.15,.2);this.shoulderPoint=new T.Vector3(.25,-.30,.42);this.preview.visible=false;this.hand.visible=false;
  }
- attach(match){this.match=match;this.effects.reset();this.hand.visible=false;this.landingMarker.visible=false;for(const mesh of [...this.rings,...this.flags]){mesh.removeFromParent();mesh.traverse(o=>{if(o.isMesh){o.geometry.dispose();o.material.dispose();}});}this.rings=[];this.flags=[];
+ attach(match){this.match=match;this.effects.reset();this.hand.visible=false;this.preview.visible=false;this.prediction=null;this.landingMarker.visible=false;for(const mesh of [...this.rings,...this.flags]){mesh.removeFromParent();mesh.traverse(o=>{if(o.isMesh){o.geometry.dispose();o.material.dispose();}});}this.rings=[];this.flags=[];
   if(match.config.mode==='domination')for(const z of match.objectives.zones){const mesh=new T.Mesh(new T.RingGeometry(z.radius-.06,z.radius,48),new T.MeshBasicMaterial({color:0x9ba8a6,transparent:true,opacity:.75,side:T.DoubleSide,depthWrite:false}));mesh.rotation.x=-Math.PI/2;mesh.position.set(z.x,z.y+.035,z.z);this.view.scene.add(mesh);this.rings.push(mesh);}
   if(match.config.mode==='ctf')for(const f of match.objectives.flags){const root=new T.Group(),pole=new T.Mesh(new T.CylinderGeometry(.025,.025,1.65,6),new T.MeshLambertMaterial({color:0xc4ccc3}));pole.position.y=.825;root.add(pole);const cloth=new T.Mesh(new T.BoxGeometry(.78,.48,.018),new T.MeshBasicMaterial({color:f.team==='blue'?0x55b6ff:0xff665b}));cloth.position.set(.39,1.35,0);root.add(cloth);this.view.scene.add(root);this.flags.push(root);}
  }
@@ -26,15 +31,30 @@ export class FieldView{
   if(this.hand.visible){this.view.weapon.visible=false;for(const arm of this.view.arms)arm.visible=false;this.hand.position.set(.22,-.24+Math.sin(this.view.phase)*.008,-.65);this.hand.rotation.set(0,0,0);const injection=syringe?Math.sin(clamp((time-a.antidoteAt)/.6,0,1)*Math.PI):0,t=action?clamp((time-action.start)/.68,0,1):0,wind=Math.sin(Math.min(1,t/.35)*Math.PI*.5),follow=t>.35?Math.sin((t-.35)/.65*Math.PI):0;
    this.wrist.position.set(-follow*.18-injection*.16,syringe?.02+injection*.07:wind*.10-follow*.08,syringe?-.02-injection*.10:wind*.10-follow*.28);this.wrist.rotation.set(syringe?-Math.PI/3+injection*.22:-wind*.55+follow*1.2,0,-injection*.25);for(const [k,obj]of Object.entries(this.handItems))obj.visible=k===kind&&!(action?.released&&!syringe);this.glove.visible=true;
    if(kind==='rocket'){const ads=this.view.aim;this.hand.position.set(.24*(1-ads),-.25,-.60);this.wrist.position.set(0,0,action?.released?Math.sin(t*Math.PI)*.09:0);this.wrist.rotation.set(0,0,0);this.handItems.rocket.visible=true;}
-   segment(this.fore,this.wrist.position,this.elbowPoint);segment(this.upper,this.elbowPoint,this.shoulderPoint);
+   this.grip.visible=kind==='rocket'||syringe;this.glove.visible=!this.grip.visible;
+   this.palmPoint.copy(this.wrist.position);
+   if(this.grip.visible){
+    if(syringe)this.grip.position.set(.027,-.011,.004);
+    else this.grip.position.set(.017,-.166,-.076);
+    this.grip.rotation.z=syringe?.28:0;
+    this.palmPoint.copy(this.grip.position).applyQuaternion(this.wrist.quaternion).add(this.wrist.position);
+   }
+   segment(this.fore,this.palmPoint,this.elbowPoint);segment(this.upper,this.elbowPoint,this.shoulderPoint);
   }
-  this.preview.visible=!!a.held&&a.held!=='rocket'&&(a.equipment[a.held]>0||action&&!action.released)&&a.alive&&(input.aim||input.fire||action&&!action.released)&&!m.remote.engaged;
+  this.preview.visible=!!a.held&&a.held!=='rocket'&&a.equipment[a.held]>0&&!syringe&&!action?.released&&a.alive&&(input.aim||input.fire||!!action)&&!m.remote.engaged&&!m.nuclear?.restricted;
   this.landingMarker.visible=false;
   if(this.preview.visible){
-   // Recompute every rendered frame from the interpolated body and current finger angles.
+   // The predicted hit is shared with the landing ring. Reproject the moving hand
+   // every frame, including when the world-space path can be reused.
    const b=a.body,prev=b.previous,body={x:prev.x+(b.x-prev.x)*alpha,y:prev.y+(b.y-prev.y)*alpha,z:prev.z+(b.z-prev.z)*alpha,height:b.height};
-   const path=trajectory(m.world,{body},action&&!action.released?action.yaw:input.yaw,action&&!action.released?action.pitch:input.pitch,m.params.gravity,30),pos=this.previewGeometry.attributes.position;
-   path.points.forEach((v,i)=>pos.setXYZ(i,v.x,v.y,v.z));this.previewGeometry.setDrawRange(0,path.points.length);pos.needsUpdate=true;if(path.hit){this.landingMarker.visible=true;this.landingNormal.set(path.normal.x,path.normal.y,path.normal.z);this.landingMarker.position.set(path.landing.x,path.landing.y,path.landing.z).addScaledVector(this.landingNormal,.018);this.landingMarker.quaternion.setFromUnitVectors(this.markerAxis,this.landingNormal);}
+   const yaw=action?.yaw??input.yaw, pitch=action?.pitch??input.pitch, gravity=m.params.gravity;
+   const last=this.prediction;
+   if(!last || last.x!==body.x || last.y!==body.y || last.z!==body.z || last.height!==body.height || last.yaw!==yaw || last.pitch!==pitch || last.gravity!==gravity){
+    this.prediction={...body,yaw,pitch,gravity,path:trajectory(m.world,{body},yaw,pitch,gravity)};
+   }
+   const path=this.prediction.path, view=this.view;
+   this.preview.update(path.points,kind,this.handItems[kind],view.camera,view.gunCamera,view.width,view.height);
+   if(path.hit){this.landingMarker.visible=true;this.landingNormal.set(path.normal.x,path.normal.y,path.normal.z);this.landingMarker.position.set(path.landing.x,path.landing.y,path.landing.z).addScaledVector(this.landingNormal,.018);this.landingMarker.quaternion.setFromUnitVectors(this.markerAxis,this.landingNormal);}
   }
  }
 }
