@@ -1,7 +1,7 @@
 import * as T from './three.module.min.js';
 import {clamp} from './physics.js';
 import {itemGeometry} from './field-models.js';
-import {atomicExposure} from './nuclear.js';
+import {atomicExposure,ATOMIC_FLIGHT_START,ATOMIC_DROP_AT} from './nuclear.js';
 export {atomicExposure} from './nuclear.js';
 import {AtomicCloud} from './atomic-cloud.js';
 const smooth=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
@@ -38,7 +38,7 @@ if(uAtomicDark<0.999 || uAtomicGlow>0.001){
   this.uniforms.uAtomicDark.value=e.dark;this.uniforms.uAtomicGlow.value=e.glow;this.uniforms.uAtomicRed.value=e.red;this.uniforms.uAtomicPulse.value=e.pulse;this.uniforms.uAtomicCenter.value.set(o.x,o.y,o.z);this.skyUniform.value=e.sky;v.scene.fog.color.copy(this.baseFog).lerp(this.darkSky,night&&active&&!n.impacted?Math.max(e.sky,smooth(age/.7)):e.sky);v.gunScene.visible=!n?.restricted;
   // The daylight sun and its halo fade with the sky; no moon or stars are enabled.
   for(const {material,opacity}of this.dayMaterials)material.opacity=opacity*(night?1:1-e.sky);
-  this.plane.visible=active&&age>=22&&age<29;if(this.plane.visible){const t=age-24;this.plane.position.set(o.x+t*38,o.y+65,o.z+t*24);this.plane.rotation.y=Math.atan2(-38,-24);}
+  this.plane.visible=active&&age>=ATOMIC_FLIGHT_START&&age<ATOMIC_FLIGHT_START+7;if(this.plane.visible){const t=age-ATOMIC_DROP_AT;this.plane.position.set(o.x+t*38,o.y+65,o.z+t*24);this.plane.rotation.y=Math.atan2(-38,-24);}
   const b=n?.bomb;this.bomb.visible=!!(active&&b?.active);if(this.bomb.visible)this.bomb.position.set(b.previous.x+(b.x-b.previous.x)*alpha,b.previous.y+(b.y-b.previous.y)*alpha,b.previous.z+(b.z-b.previous.z)*alpha);
   this.cloud.update(n);
   // Five degrees lower than the previous knockdown view; keep free look and roll.

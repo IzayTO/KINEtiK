@@ -1,21 +1,25 @@
 // Fictional match-ending operation; fixed-step state machine, independent of rendering.
 import {clamp,BODY} from './physics.js';
 import {floorAt,projectileTrace} from './ordnance.js';
-export const ATOMIC_KILLS=41,ALARM_SECONDS=20,FADE_SECONDS=2,ATOMIC_PULSES=5;
+export const ATOMIC_KILLS=41,ALARM_SECONDS=20,FADE_SECONDS=3,ATOMIC_PULSES=5;
 export const ATOMIC_DEATHS=['DEMASIADO URANIO-235','SE ROMPIÓ TU ENLACE','FISIÓN: FIN DE SESIÓN','TU DOSIS SUPERÓ EL LÍMITE','QUEDASTE FUERA DEL ESPECTRO','LA REACCIÓN FUE EN CADENA','TU SEÑAL SE DESINTEGRÓ','NÚCLEO INESTABLE'];
 const smooth=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
-const ALARM_LIT = 2, ALARM_DARK = 0.5;
+const ALARM_LIT = 2;
+export const ATOMIC_FLIGHT_START = ALARM_SECONDS + FADE_SECONDS;
+export const ATOMIC_DROP_AT = ATOMIC_FLIGHT_START + 2;
 export function atomicAlarmPhase(age) {
- return Math.max(0, age) % (ALARM_LIT + ALARM_DARK);
+ return Math.max(0, age) % ALARM_LIT;
 }
-// The lamps and the siren share both soft edges and the half-second blackout.
+// The next soft attack begins as soon as the previous release reaches zero.
+export function atomicFade(age) {
+ return clamp((ALARM_SECONDS + FADE_SECONDS - age) / FADE_SECONDS, 0, 1);
+}
 export function atomicAlarm(age) {
  const phase = atomicAlarmPhase(age);
- if (phase >= ALARM_LIT) return 0;
- const fade = clamp((ALARM_SECONDS + FADE_SECONDS - age) / FADE_SECONDS, 0, 1);
+ const fade = atomicFade(age);
  return smooth(phase / .22) * smooth((ALARM_LIT - phase) / .30) * fade;
 }
-export function atomicExposure(n,night){if(!n?.active)return{dark:1,red:0,pulse:0,sky:0,glow:0};const blast=n.impactAge,hit=n.impacted,nightFade=smooth((n.age-20)/2),recover=hit?smooth((blast-1.6)/5.8):0;return{
+export function atomicExposure(n,night){if(!n?.active)return{dark:1,red:0,pulse:0,sky:0,glow:0};const blast=n.impactAge,hit=n.impacted,nightFade=smooth(1-atomicFade(n.age)),recover=hit?smooth((blast-1.6)/5.8):0;return{
  dark:night?1-.9*nightFade:hit?.1+.9*recover:1,
  red:night&&!hit?smooth(n.age/.7):0,pulse:night?atomicAlarm(n.age):0,
  sky:night?nightFade*.65:hit?1-recover:0,
@@ -47,9 +51,9 @@ export class Nuclear{
  settle(dt){for(const {actor:a}of this.roster){const p=a.body;p.previous.x=p.x;p.previous.y=p.y;p.previous.z=p.z;p.vx=p.vz=0;p.vy-=this.match.params.gravity*dt;p.move(dt);}}
  step(dt){if(!this.active)return;const m=this.match,age=this.age;
   if(this.state==='alarm'&&age>=ALARM_SECONDS)this.blackout();
-  if(this.state==='fade'&&age>=ALARM_SECONDS+FADE_SECONDS)this.state='flight';
-  if(this.state==='flight'&&age>=24){if(!this.bomb)this.bomb={active:true,x:this.origin.x,y:this.origin.y+65,z:this.origin.z,previous:{x:this.origin.x,y:this.origin.y+65,z:this.origin.z}};
-   const p=this.bomb;Object.assign(p.previous,{x:p.x,y:p.y,z:p.z});const end={x:this.origin.x,y:this.origin.y+65-9*(age-24)**2,z:this.origin.z},hit=projectileTrace(m.world,p,end,.25);
+  if(this.state==='fade'&&age>=ATOMIC_FLIGHT_START)this.state='flight';
+  if(this.state==='flight'&&age>=ATOMIC_DROP_AT){if(!this.bomb)this.bomb={active:true,x:this.origin.x,y:this.origin.y+65,z:this.origin.z,previous:{x:this.origin.x,y:this.origin.y+65,z:this.origin.z}};
+   const p=this.bomb;Object.assign(p.previous,{x:p.x,y:p.y,z:p.z});const end={x:this.origin.x,y:this.origin.y+65-9*(age-ATOMIC_DROP_AT)**2,z:this.origin.z},hit=projectileTrace(m.world,p,end,.25);
    if(hit||end.y<=this.origin.y+.08){const t=hit?clamp(hit.fraction,0,1):1;this.impact({x:p.x+(end.x-p.x)*t,y:p.y+(end.y-p.y)*t,z:p.z+(end.z-p.z)*t});}else Object.assign(p,end);
   }
   if(this.impacted){this.settle(dt);const t=this.impactAge;if(t>=.35&&!this.roared){this.roared=true;m.events.push({type:'atomic-roar',actor:0});}
