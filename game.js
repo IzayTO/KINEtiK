@@ -101,11 +101,15 @@ function setupSettings(){
     const wrap=document.createElement('div');wrap.className='setting';
     wrap.innerHTML=`<label for="setting-${key}">${title}<output id="value-${key}" for="setting-${key}"></output></label><input id="setting-${key}" type="range" min="${min}" max="${max}" step="${step}" value="${params[key]}">`;
     sections[['sensitivity','hFov','adsFov','cameraMotion','recoil'].includes(key)?'camera':key==='resolution'?'performance':'movement'].append(wrap);
-    const el=$('setting-'+key);el.addEventListener('input',()=>{params[key]=Number(el.value);refreshSettings();saveSettings();if(key==='resolution')view?.resize(innerWidth,innerHeight,true);});
+    const el=$('setting-'+key);el.addEventListener('input',()=>{params[key]=Number(el.value);refreshSettings();saveSettings();if(key==='resolution')resizeGame(true);});
   }
-  for(const key of ['autoSprint','autoResolution','contextualSlide','sound'])$(key).addEventListener('change',()=>{params[key]=$(key).checked;if(key==='autoResolution'&&!params[key]){view.dynamicScale=1;view.resize(innerWidth,innerHeight,true);}saveSettings();});
-  $('defaults').addEventListener('click',()=>{Object.assign(params,DEFAULTS);view.dynamicScale=1;refreshSettings();view.resize(innerWidth,innerHeight,true);saveSettings();});
+  for(const key of ['autoSprint','autoResolution','contextualSlide','sound'])$(key).addEventListener('change',()=>{params[key]=$(key).checked;if(key==='autoResolution'&&!params[key]){view.dynamicScale=1;resizeGame(true);}saveSettings();});
+  $('defaults').addEventListener('click',()=>{Object.assign(params,DEFAULTS);view.dynamicScale=1;refreshSettings();resizeGame(true);saveSettings();});
   refreshSettings();
+}
+function resizeGame(force=false){
+  const w=canvas.clientWidth,h=canvas.clientHeight;
+  if(view&&w>0&&h>0)view.resize(w,h,force);
 }
 function refreshSettings(){
   for(const [key,,,max,step,unit]of controls){$('setting-'+key).value=params[key];$('value-'+key).textContent=(step>=1?params[key].toFixed(0):params[key].toFixed(step===0.01||step===0.05?2:1))+' '+unit;}
@@ -210,17 +214,17 @@ function tick(now){
   }
   if(autoTime>3&&playing&&params.autoResolution&&!diagnostic){autoTime=0;
     const next=fps<49?Math.max(0.62,view.dynamicScale-0.08):fps>58?Math.min(1,view.dynamicScale+0.035):view.dynamicScale;
-    if(next!==view.dynamicScale){view.dynamicScale=next;view.resize(innerWidth,innerHeight,true);}
+    if(next!==view.dynamicScale){view.dynamicScale=next;resizeGame(true);}
   }
 }
 function makeLevel(id){return id==='airport'?createAirport():refineLevel(createLevel());}
 function updateMapIdentity(){document.querySelector('.location b').textContent=level.name;document.querySelector('.map-caption>b').textContent=level.name;document.querySelector('.map-caption>span').textContent=level.id==='airport'?'TERMINAL / PLATAFORMA / CARGA':'COMPLEJO DE MANTENIMIENTO';document.querySelector('.intro-stats b').textContent=level.width+' × '+level.depth;document.querySelector('.map-description h3').textContent=level.name;document.querySelector('.map-description>p').textContent=level.id==='airport'?'Terminal transitable, pasarela, hangar, aeronaves y carga. Seis sectores conectados.':'Un complejo compacto con rutas que se cruzan a distintas alturas.';document.querySelector('.map-description ol').hidden=level.id==='airport';}
-function selectLevel(id){if((level.id||'nodo09')===id)return;const renderer=view.renderer;view.dispose();level=makeLevel(id);player.world=new CollisionWorld(level.solids);player.spawn={...level.spawn};player.reset();match=new Match(player.world,player,arsenal,params,level);view=new V3World(canvas,level,params,{render:!diagnostic,renderer});view.preferences=preferences;view.resize(innerWidth,innerHeight,true);aimSupport=new AimSupport(match,preferences);Object.assign(combatUI,{match,view});Object.assign(fieldHUD,{match,view});Object.assign(gameUI,{match,view});Object.assign(supportUI,{match,view});operationUI.match=match;minimap.setLevel(level);updateMapIdentity();drawMap($('welcome-map'),false);}
+function selectLevel(id){if((level.id||'nodo09')===id)return;const renderer=view.renderer;view.dispose();level=makeLevel(id);player.world=new CollisionWorld(level.solids);player.spawn={...level.spawn};player.reset();match=new Match(player.world,player,arsenal,params,level);view=new V3World(canvas,level,params,{render:!diagnostic,renderer});view.preferences=preferences;resizeGame(true);aimSupport=new AimSupport(match,preferences);Object.assign(combatUI,{match,view});Object.assign(fieldHUD,{match,view});Object.assign(gameUI,{match,view});Object.assign(supportUI,{match,view});operationUI.match=match;minimap.setLevel(level);updateMapIdentity();drawMap($('welcome-map'),false);}
 function setupConfigTransfer(){
  const snapshot=()=>configurationSnapshot(params,preferences,editor.exportLayouts(),matchConfig),status=$('configuration-status');
  $('export-configuration').onclick=()=>{downloadConfiguration(snapshot());status.textContent='Configuración exportada: ajustes y ambos perfiles del HUD.';};
  $('import-configuration').onclick=()=>$('configuration-file').click();
- $('configuration-file').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;status.textContent='Cargando configuración…';try{if(file.size>262144)throw new Error('El archivo de ajustes es demasiado grande.');const data=parseConfiguration(JSON.parse(await file.text()),snapshot(),controls);Object.assign(params,data.settings);Object.assign(preferences,data.preferences);editor.store.layouts=data.hud;editor.store.draft=null;editor.store.save();editor.apply();matchConfig=data.match;saveSettings();savePreferences(preferences);localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));for(const [key,val]of Object.entries(matchConfig)){const el=$('match-'+key);if(el){if(el.tagName==='SELECT'&&![...el.options].some(o=>o.value===String(val))){const option=document.createElement('option');option.value=String(val);option.textContent=String(val);el.append(option);}el.value=String(val);}}$('map-select').value=matchConfig.map;$('match-mode').onchange();$('match-bots').oninput();arsenal.autoReload=preferences.autoReload;refreshSettings();refreshV2();view.resize(innerWidth,innerHeight,true);status.textContent='Configuración personalizada aplicada. El mapa elegido se usa en la siguiente partida.';toast('Configuración personalizada aplicada');}catch(error){status.textContent='No se pudo importar: '+error.message;}finally{e.target.value='';}};
+ $('configuration-file').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;status.textContent='Cargando configuración…';try{if(file.size>262144)throw new Error('El archivo de ajustes es demasiado grande.');const data=parseConfiguration(JSON.parse(await file.text()),snapshot(),controls);Object.assign(params,data.settings);Object.assign(preferences,data.preferences);editor.store.layouts=data.hud;editor.store.draft=null;editor.store.save();editor.apply();matchConfig=data.match;saveSettings();savePreferences(preferences);localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));for(const [key,val]of Object.entries(matchConfig)){const el=$('match-'+key);if(el){if(el.tagName==='SELECT'&&![...el.options].some(o=>o.value===String(val))){const option=document.createElement('option');option.value=String(val);option.textContent=String(val);el.append(option);}el.value=String(val);}}$('map-select').value=matchConfig.map;$('match-mode').onchange();$('match-bots').oninput();arsenal.autoReload=preferences.autoReload;refreshSettings();refreshV2();resizeGame(true);status.textContent='Configuración personalizada aplicada. El mapa elegido se usa en la siguiente partida.';toast('Configuración personalizada aplicada');}catch(error){status.textContent='No se pudo importar: '+error.message;}finally{e.target.value='';}};
 }
 function beginSimulation(config=matchConfig){
  supportUI?.reset();selectLevel(config.map||'nodo09');matchConfig={...matchConfig,...config};try{localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));}catch{}match.start(matchConfig);aimSupport.reset();combatUI.reset();fieldHUD.reset();gameUI.reset();operationUI.reset();view.attachMatch(match);player.previous={x:player.x,y:player.y,z:player.z};input.yaw=match.player.yaw;input.pitch=0;input.clear();clock.reset();events.length=0;arsenal.autoReload=preferences.autoReload;view.eye=1.67;view.landing=0;playTime=0;hits=shots=0;$('hits').textContent='00';$('match-result').hidden=true;$('death-feedback').hidden=true;updateMatchHUD();
@@ -285,9 +289,10 @@ try{
 
   setupSettings();setupConfigTransfer();updateMapIdentity();drawMap($('welcome-map'),false);
   if(input.touchMode)$('start-help').textContent='Joystick · Mirada táctil · Botones simultáneos';
-  view.resize(innerWidth,innerHeight,true);
-  window.addEventListener('resize',()=>{view.resize(innerWidth,innerHeight,true);input.clear();clock.reset();});
-  window.visualViewport?.addEventListener('resize',()=>view.resize(innerWidth,innerHeight));
+  resizeGame(true);
+  window.addEventListener('resize',()=>{resizeGame();input.clear();clock.reset();});
+  window.visualViewport?.addEventListener('resize',()=>resizeGame());
+  if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>resizeGame()).observe(canvas);
   canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();pause();$('fatal-text').textContent='El navegador liberó el contexto gráfico. Recarga para volver al punto inicial; tus ajustes se conservarán.';$('fatal').hidden=false;});
   canvas.addEventListener('webglcontextrestored',()=>location.reload());
   document.addEventListener('pointerlockerror',()=>{if(started)pause();else $('start-help').textContent='Vuelve a pulsar INICIAR para permitir la captura del mouse.';});
