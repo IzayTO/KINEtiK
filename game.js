@@ -1,3 +1,4 @@
+import {SquadPresentation} from './squad-presentation.js';
 import {OperationUI,medalIcon} from './operation-ui.js';
 import {SupportUI} from './support-ui.js';
 import {GameInterface,quickConfig} from './interface.js';
@@ -42,7 +43,7 @@ let fps=60,frameCount=0,frameSum=0,hudTime=0,hitTimer=0,hits=0,shots=0,playTime=
 const audio=new AudioFX(params),preferences=loadPreferences(),arsenal=new Arsenal();
 // Explicit diagnostic mode does not pretend to render a game. Normal startup always requires WebGL.
 const diagnostic=new URLSearchParams(location.search).has('qa');
-let visorEditor,editor,minimap,reticle,refreshV2,assistCache=null,assistTime=0,match,aimSupport,combatUI,fieldHUD,gameUI,supportUI,operationUI;
+let presentation,visorEditor,editor,minimap,reticle,refreshV2,assistCache=null,assistTime=0,match,aimSupport,combatUI,fieldHUD,gameUI,supportUI,operationUI;
 let matchConfig={...MATCH_DEFAULTS};try{const saved=JSON.parse(localStorage.getItem('kinetic-match-v3'));if(saved)Object.assign(matchConfig,saved);}catch{}
 audio.preferences=preferences;arsenal.autoReload=preferences.autoReload;
 const events=[],metrics={physicsMS:0,renderMS:0,hudMS:0,minimapMS:0,physicsSteps:0};
@@ -50,14 +51,14 @@ const events=[],metrics={physicsMS:0,renderMS:0,hudMS:0,minimapMS:0,physicsSteps
 function toast(message){$('toast').textContent=message;$('toast').style.opacity='1';clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').style.opacity='0',2200);}
 function tab(name){for(const button of document.querySelectorAll('[data-tab]'))button.classList.toggle('active',button.dataset.tab===name);for(const id of ['settings','map','controls','reticle','match','audio','personalization'])$('tab-'+id).hidden=id!==name;if(name==='map')drawMap($('pause-map'),true);}
 function pause(settings=false){
-  if(visorEditor?.opened || match?.nuclear.impacted)return;
+  if(presentation?.active||!$('match-result').hidden||visorEditor?.opened||match?.nuclear.impacted)return;
   if(supportUI?.opened){supportUI.close();return;}
   if(editor?.editing){editor.close(false);return;}if(!started){openOptions();return;}playing=false;input.active=false;input.clear();clock.reset();audio.suspend();
   $('resume').hidden=false;$('pause').hidden=false;$('touch-controls').hidden=true;$('hud').hidden=true;
   if(document.pointerLockElement)document.exitPointerLock();if(settings)tab('settings');
 }
 async function start(){
-  if(!view||editor?.editing)return;
+  if(!view||editor?.editing||presentation?.active)return;
   if((!started||match.ended)&&!match.running)beginSimulation();
   audio.unlock();audio.ambient();
   if(!input.touchMode&&!diagnostic){
@@ -118,12 +119,14 @@ function refreshSettings(){
 }
 function tick(now){
   frame=requestAnimationFrame(tick);const rawDt=Math.max(0,(now-lastTime)/1000||0),dt=Math.min(rawDt,0.1);lastTime=now;
-  if(visorEditor?.opened)return;
+  if(presentation?.active){presentation.frame(now);return;}
+  if(visorEditor?.opened||!$('match-result').hidden)return;
   let alpha=1;
   if(playing){
     const physicsStart=performance.now();let steps=0;
     playTime+=dt;input.speed=player.speed;input.airborne=!player.grounded;
     alpha=clock.advance(dt,h=>{
+      if(match.ended)return;
       input.remoteMode=match.remote.engaged;input.throwableMode=!!match.player.held&&match.player.held!=='rocket';input.actionADS=(arsenal.selected!==0||match.player.held==='rocket')&&!input.throwableMode;
       const wasSlide=player.sliding,wasSpeed=player.speed,sample=supportUI.opened?{x:0,z:0,yaw:input.yaw,pitch:input.pitch,actions:[],fire:false,aim:false}:input.sample(true);match.nuclear.filterInput(sample);
       if(match.nuclear.impacted){match.player.yaw=input.yaw;match.player.pitch=input.pitch;match.step(h);steps++;return;}
@@ -181,6 +184,7 @@ function tick(now){
       registerHits(result);
     }events.length=0;
     processMatchEvents();
+    if(presentation.active)return;
 
     if(match.config.quality==='adaptive')match.qualityScale=fps<46?1.5:1;
     assistTime+=dt;if(assistTime>=.08){assistTime=0;assistCache=preferences.assist?view.assistTarget(input.yaw,input.pitch,preferences):null;}
@@ -227,7 +231,7 @@ function setupConfigTransfer(){
  $('configuration-file').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;status.textContent='Cargando configuración…';try{if(file.size>262144)throw new Error('El archivo de ajustes es demasiado grande.');const data=parseConfiguration(JSON.parse(await file.text()),snapshot(),controls);Object.assign(params,data.settings);Object.assign(preferences,data.preferences);editor.store.layouts=data.hud;editor.store.draft=null;editor.store.save();editor.apply();matchConfig=data.match;saveSettings();savePreferences(preferences);localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));for(const [key,val]of Object.entries(matchConfig)){const el=$('match-'+key);if(el){if(el.tagName==='SELECT'&&![...el.options].some(o=>o.value===String(val))){const option=document.createElement('option');option.value=String(val);option.textContent=String(val);el.append(option);}el.value=String(val);}}$('map-select').value=matchConfig.map;$('match-mode').onchange();$('match-bots').oninput();arsenal.autoReload=preferences.autoReload;refreshSettings();refreshV2();resizeGame(true);status.textContent='Configuración personalizada aplicada. El mapa elegido se usa en la siguiente partida.';toast('Configuración personalizada aplicada');}catch(error){status.textContent='No se pudo importar: '+error.message;}finally{e.target.value='';}};
 }
 function beginSimulation(config=matchConfig){
- supportUI?.reset();selectLevel(config.map||'nodo09');matchConfig={...matchConfig,...config};try{localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));}catch{}match.start(matchConfig);aimSupport.reset();combatUI.reset();fieldHUD.reset();gameUI.reset();operationUI.reset();view.attachMatch(match);player.previous={x:player.x,y:player.y,z:player.z};input.yaw=match.player.yaw;input.pitch=0;input.clear();clock.reset();events.length=0;arsenal.autoReload=preferences.autoReload;view.eye=1.67;view.landing=0;playTime=0;hits=shots=0;$('hits').textContent='00';$('match-result').hidden=true;$('death-feedback').hidden=true;updateMatchHUD();
+ presentation?.close();supportUI?.reset();selectLevel(config.map||'nodo09');matchConfig={...matchConfig,...config};try{localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));}catch{}match.start(matchConfig);aimSupport.reset();combatUI.reset();fieldHUD.reset();gameUI.reset();operationUI.reset();view.attachMatch(match);player.previous={x:player.x,y:player.y,z:player.z};input.yaw=match.player.yaw;input.pitch=0;input.clear();clock.reset();events.length=0;arsenal.autoReload=preferences.autoReload;view.eye=1.67;view.landing=0;playTime=0;hits=shots=0;$('hits').textContent='00';$('match-result').hidden=true;$('death-feedback').hidden=true;updateMatchHUD();
 }
 function registerHits(result){if(result.length){hits+=result.length;hitTimer=.12;audio.sound('hit');$('hits').textContent=String(hits).padStart(2,'0');}}
 function processMatchEvents(){
@@ -241,7 +245,7 @@ function processMatchEvents(){
   if(e.type==='shot'){audio.sound(e.weapon,pos);continue;}
   if(e.type==='spawn'&&local){input.clear();input.yaw=match.player.yaw;input.pitch=0;input.active=playing;view.eye=1.67;view.landing=0;}
   if(e.type==='elimination'&&local){input.clear();if(match.remote.engaged){input.yaw=match.remote.savedYaw;input.pitch=match.remote.savedPitch;}input.active=false;player.jumpEvent=player.landEvent=false;}
-  if(e.type==='finished'){playing=false;input.active=false;input.clear();if(document.pointerLockElement)document.exitPointerLock();$('pause').hidden=true;$('hud').hidden=true;$('touch-controls').hidden=true;showResult();continue;}
+  if(e.type==='finished'){showSquad();continue;}
 
   if(['damage','melee','supply-full','consume'].includes(e.type))continue;audio.sound(e.type,pos);
  }match.events.length=0;
@@ -255,8 +259,20 @@ function updateMatchHUD(){
 function openMatchMenu(){supportUI?.close(false);playing=false;input.active=false;input.clear();clock.reset();if(document.pointerLockElement)document.exitPointerLock();$('welcome').hidden=true;$('hud').hidden=true;$('touch-controls').hidden=true;$('pause').hidden=false;$('match-result').hidden=true;$('resume').hidden=!started;tab('match');}
 function openOptions(){supportUI?.close(false);playing=false;input.active=false;input.clear();clock.reset();audio.suspend();if(document.pointerLockElement)document.exitPointerLock();$('welcome').hidden=true;$('hud').hidden=true;$('touch-controls').hidden=true;$('pause').hidden=false;$('resume').hidden=!started;tab('settings');}
 function home(){supportUI?.reset();match.nuclear.reset();operationUI.reset();playing=false;started=false;match.running=false;match.remote.reset();gameUI.reset();gameUI.releaseCapture();input.active=false;input.clear();clock.reset();audio.suspend();if(document.pointerLockElement)document.exitPointerLock();$('pause').hidden=true;$('welcome').hidden=false;$('hud').hidden=true;$('touch-controls').hidden=true;$('match-result').hidden=true;}
+function showSquad(){
+ playing=false;input.active=false;input.clear();clock.reset();audio.suspend();
+ supportUI.reset();gameUI.reset();combatUI.reset();operationUI.reset();
+ $('pause').hidden=true;$('hud').hidden=true;$('touch-controls').hidden=true;
+ $('death-feedback').hidden=true;$('deployment-curtain').hidden=true;
+ presentation.open(view,match.result);
+ if(document.pointerLockElement)document.exitPointerLock();
+}
 function showResult(){const r=match.result;$('result-title').textContent=(r.reason==='atomic'?'FIN ATÓMICO · ':'GANADOR · ')+r.winner;const medals=$('result-medals');medals.replaceChildren();for(const medal of r.medals||[]){const card=document.createElement('article');card.innerHTML=medalIcon(medal.icon);const title=document.createElement('b'),detail=document.createElement('small');title.textContent=medal.title;detail.textContent=medal.detail;card.append(title,detail);medals.append(card);}const table=document.createElement('table'),head=document.createElement('tr');for(const name of (['ctf','confirmed'].includes(r.mode)?['PARTICIPANTE','BAJAS','CAÍDAS',r.mode==='confirmed'?'CONFIRMADAS':'CAPTURAS']:['PARTICIPANTE','BAJAS','CAÍDAS'])){const th=document.createElement('th');th.textContent=name;head.append(th);}table.append(head);for(const a of r.ranked){const row=document.createElement('tr');for(const value of (['ctf','confirmed'].includes(r.mode)?[a.name,a.kills,a.deaths,a.captures]:[a.name,a.kills,a.deaths])){const td=document.createElement('td');td.textContent=value;if(value===a.name)td.className='name-'+a.team;row.append(td);}table.append(row);}$('result-scores').replaceChildren(table);if(['ctf','domination','confirmed'].includes(r.mode)){const score=document.createElement('p');score.textContent=`AZUL ${r.score.blue} · ROJO ${r.score.red} / ${r.mode==='ctf'?'CAPTURAS':'PUNTOS'}`;$('result-scores').prepend(score);}$('match-result').hidden=false;}
 function setupMatchUI(){
+ presentation=new SquadPresentation($('squad-presentation'),()=>{
+  showResult();$('result-restart').focus({preventScroll:true});
+ });
+ $('match-result').addEventListener('keydown',e=>e.stopPropagation());
  const fields=['map','mode','bots','difficulty','team','minutes','limit','quality','crateSeconds','environment','captureLimit','dominationLimit'];for(const key of fields){const el=$('match-'+key);el.value=String(matchConfig[key]);if(!el.value)el.value=String(MATCH_DEFAULTS[key]);}
  const refresh=()=>{const mode=$('match-mode').value;$('elimination-limit-field').firstChild.textContent=mode==='confirmed'?'Límite de confirmaciones':'Límite de eliminaciones';$('capture-limit-field').hidden=mode!=='ctf';$('domination-limit-field').hidden=mode!=='domination';$('elimination-limit-field').hidden=['ctf','domination'].includes(mode);$('match-team').disabled=$('match-mode').value==='ffa';const n=+$('match-bots').value;$('bot-count-label').textContent=n;$('bot-warning').textContent=n>=12?n+' bots · Mayor carga de CPU. Reduce la cantidad o usa IA adaptativa si baja la fluidez.':n+' bots · Perfiles y percepción activos.';};$('match-bots').oninput=refresh;$('match-mode').onchange=()=>{refresh();for(const b of document.querySelectorAll('[data-pick-mode]'))b.classList.toggle('selected',b.dataset.pickMode===$('match-mode').value);};refresh();
  for(const b of document.querySelectorAll('[data-pick-mode]'))b.onclick=()=>{$('match-mode').value=b.dataset.pickMode;$('match-mode').onchange();$('match-config').hidden=false;};

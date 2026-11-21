@@ -11,8 +11,10 @@ const Y=new T.Vector3(0,-1,0),v=new T.Vector3(),q=new T.Quaternion(),matrix=new 
 const C={suit:0x354d49,plate:0xb3b3a7,joint:0x263c39,orange:0xe97b31,visor:0x78f9d7,steel:0x66756d,boot:0x324843,red:0xd85d51,blue:0x4b97d6};
 function joint(parent,x=0,y=0,z=0){const o=new T.Object3D();o.position.set(x,y,z);parent.add(o);return o;}
 export class SoldierBatch{
- constructor(scene,bots){this.scene=scene;this.parts=[];this.rigs=[];this.material=new T.MeshLambertMaterial({color:0xffffff,flatShading:true});this.geometry=armorGeometry();this.boxGeometry=new T.BoxGeometry(1,1,1);
-  this.visorAtlas=new VisorAtlas(visors);this.ledMaterial=visorMaterial(this.visorAtlas,true);
+ constructor(scene,bots,poseSource=null){this.scene=scene;this.parts=[];this.rigs=[];this.ownsAppearance=!poseSource;
+  this.material=poseSource?.material??new T.MeshLambertMaterial({color:0xffffff,flatShading:true});
+  this.geometry=poseSource?.geometry??armorGeometry();this.boxGeometry=new T.BoxGeometry(1,1,1);
+  this.visorAtlas=poseSource?.visorAtlas??new VisorAtlas(visors);this.ledMaterial=poseSource?.ledMaterial??visorMaterial(this.visorAtlas,true);
   for(const b of bots)this.rigs.push(this.build(b));this.batches=[];
   for(const type of ['armor','box']){const parts=this.parts.filter(p=>p.type===type),mesh=new T.InstancedMesh(type==='armor'?this.geometry:this.boxGeometry,type==='armor'?this.material:this.ledMaterial,parts.length);if(type==='box')this.boxGeometry.setAttribute('visorSlot',new T.InstancedBufferAttribute(Float32Array.from(parts,p=>p.visorSlot??-1),1));mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);mesh.frustumCulled=false;mesh.userData.soldier=true;this.scene.add(mesh);parts.forEach((p,i)=>{p.index=i;mesh.setColorAt(i,color.setHex(p.color));});this.batches.push({mesh,parts,botCount:parts.filter(p=>!p.bot.human).length});}
  }
@@ -32,7 +34,7 @@ export class SoldierBatch{
   }
   // Weapon rests in the hands. Each weapon has its own silhouette; animation uses the same bones.
   const gun=joint(chest,.15,-.005,-.32),guns=[];
-  for(let id=0;id<3;id++){const group=joint(gun),start=parts.length;if(id===0){add(group,[.04,.05,.12],[0,0,0],C.joint);const blade=add(group,[.055,.016,.26],[.06,0,.18],C.steel);blade.bone.rotation.y=.55;}else{add(group,[.09,.11,.23],[0,0,-.06],C.joint);add(group,[id===1?.09:.12,.08,.25],[0,0,-.29],id===1?C.suit:C.steel);add(group,[.028,.03,.30],[0,.015,-.48],C.joint,'box');add(group,[.09,.12,.10],[0,-.015,.14],C.suit);if(id===1)add(group,[.06,.16,.07],[0,-.10,-.10],C.steel);else add(group,[.03,.03,.32],[0,-.04,-.35],C.suit,'box');}for(let j=start;j<parts.length;j++)parts[j].weapon=id;guns.push(group);}
+  for(let id=0, count=this.ownsAppearance?3:0;id<count;id++){const group=joint(gun),start=parts.length;if(id===0){add(group,[.04,.05,.12],[0,0,0],C.joint);const blade=add(group,[.055,.016,.26],[.06,0,.18],C.steel);blade.bone.rotation.y=.55;}else{add(group,[.09,.11,.23],[0,0,-.06],C.joint);add(group,[id===1?.09:.12,.08,.25],[0,0,-.29],id===1?C.suit:C.steel);add(group,[.028,.03,.30],[0,.015,-.48],C.joint,'box');add(group,[.09,.12,.10],[0,-.015,.14],C.suit);if(id===1)add(group,[.06,.16,.07],[0,-.10,-.10],C.steel);else add(group,[.03,.03,.32],[0,-.04,-.35],C.suit,'box');}for(let j=start;j<parts.length;j++)parts[j].weapon=id;guns.push(group);}
   return{bot,root,pelvis,abdomen,chest,neck,head,arms,legs,gun,guns,parts,phase:bot.id*.81,bodyYaw:bot.yaw,pose:0,hit:0,death:0,land:0,previousGround:true,alive:bot.alive,speed:0,moving:0,air:0,bank:0,vx:0,vz:0,accel:0,recoil:0};
  }
  armIK(arm,target){const shoulder=arm.shoulder.position,dx=target.x-shoulder.x,dy=target.y-shoulder.y,dz=target.z-shoulder.z,L1=.29,L2=.27,d=clamp(Math.hypot(dx,dy,dz),.09,.555),dir=ikDir.set(dx,dy,dz).normalize(),bend=ikBend.set(arm.side*.8,-.6,.1);bend.addScaledVector(dir,-bend.dot(dir)).normalize();const a=(L1*L1-L2*L2+d*d)/(2*d),h=Math.sqrt(Math.max(0,L1*L1-a*a));const elbow=ikElbow.copy(dir).multiplyScalar(a).addScaledVector(bend,h);arm.shoulder.quaternion.setFromUnitVectors(Y,ikUnit.copy(elbow).normalize());v.set(dx,dy,dz).sub(elbow).normalize().applyQuaternion(q.copy(arm.shoulder.quaternion).invert());arm.elbow.quaternion.setFromUnitVectors(Y,v);}
@@ -81,5 +83,5 @@ export class SoldierBatch{
   }
   for(const batch of this.batches){batch.mesh.count=showPlayer?batch.parts.length:batch.botCount;for(let i=0;i<batch.mesh.count;i++){const p=batch.parts[i];const b=p.bot,hidden=(!b.atomicDown&&!b.alive&&time-b.deathTime>2.7)||(p.weapon!==null&&(b.atomicDown||p.weapon!==b.arsenal.selected||b.held||b.throwAction||time-b.antidoteAt<.6));if(hidden)matrix.makeScale(0,0,0);else matrix.copy(p.bone.matrixWorld);batch.mesh.setMatrixAt(p.index,matrix);const flash=b.hit>0?2:time<b.spawnUntil?1:0;if(p.flash!==flash){p.flash=flash;color.setHex(p.color);if(flash)color.lerp(flashColor,flash===2?.65:.28);batch.mesh.setColorAt(p.index,color);batch.mesh.instanceColor.needsUpdate=true;}}batch.mesh.instanceMatrix.needsUpdate=true;}
  }
- dispose(){for(const b of this.batches){this.scene.remove(b.mesh);b.mesh.dispose();}this.geometry.dispose();this.boxGeometry.dispose();this.material.dispose();this.ledMaterial.dispose();this.visorAtlas.dispose();}
+ dispose(){for(const b of this.batches){this.scene.remove(b.mesh);b.mesh.dispose();}this.boxGeometry.dispose();if(this.ownsAppearance){this.geometry.dispose();this.material.dispose();this.ledMaterial.dispose();this.visorAtlas.dispose();}}
 }

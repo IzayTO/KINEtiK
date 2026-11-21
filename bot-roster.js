@@ -12,3 +12,25 @@ export function botNames(count,random=Math.random){
  const pool=[...BOT_TAGS];for(let i=pool.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
  return pool.slice(0,count);
 }
+
+// A callsign stays with its numbered visor across rematches and map changes.
+const callsigns=botNames(20);
+export const botName=id=>callsigns[id-1];
+let previousAllies=new Set();
+
+export function drawAllies(botCount,random=Math.random){
+ const slots=Array.from({length:botCount},(_,i)=>i+1);
+ // The slider counts bots. The local player takes one of the ten team places.
+ const count=Math.min(9,Math.floor(botCount/2));
+ for(let i=0;i<count;i++){
+  const j=i+Math.floor(random()*(slots.length-i));
+  [slots[i],slots[j]]=[slots[j],slots[i]];
+ }
+ if(count&&previousAllies.size===count&&slots.slice(0,count).every(id=>previousAllies.has(id))){
+  const ally=Math.floor(random()*count);
+  const opponent=count+Math.floor(random()*(slots.length-count));
+  [slots[ally],slots[opponent]]=[slots[opponent],slots[ally]];
+ }
+ previousAllies=new Set(slots.slice(0,count));
+ return previousAllies;
+}

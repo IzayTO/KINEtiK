@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="airfield.css">
   <link rel="stylesheet" href="operation.css">
   <link rel="stylesheet" href="visor.css">
+  <link rel="stylesheet" href="squad.css">
 </head>
 <body>
   <canvas id="rc-underlay" hidden aria-hidden="true"></canvas>
@@ -106,6 +107,12 @@
 <div id="tab-personalization" class="tab-content" hidden><div class="visor-entry"><div><h3>Editor de visor</h3><p>Dibuja el visor LED de tu casco y de tus bots.</p></div><button id="open-visor" class="primary" type="button">Abrir editor de visor ↗</button></div></div>
 <div id="tab-reticle" class="tab-content" hidden><p class="settings-note">Retícula centrada en el rayo real. La expansión muestra el cono de dispersión del arma equipada.</p><div class="reticle-options"><label>Diseño <select id="reticleStyle"><option value="dot">Punto</option><option value="cross">Cruz fina</option><option value="segments">Cuatro segmentos</option><option value="crossdot">Cruz y punto</option><option value="circle">Círculo fino</option><option value="square">Cuadrado abierto</option><option value="dynamic">Dinámica</option></select></label><label>Mira física K-09 <select id="sightShape"><option value="square">Cuadrada</option><option value="circle">Circular</option></select></label><label>Color <input id="reticleColor" type="color"></label></div><div id="reticle-settings" class="settings-grid"></div><div class="switches"><label><input id="reticleDot" type="checkbox"> Punto central</label><label><input id="reticleDynamic" type="checkbox"> Expansión según dispersión real</label></div><div class="reticle-preview" id="reticle-preview"></div><button id="reset-v2-settings" class="secondary">Restaurar controles y retícula</button></div>
     </div>
+  </section>
+  <section id="squad-presentation" role="dialog" aria-modal="true" aria-labelledby="squad-outcome" hidden>
+    <header class="squad-heading"><div><span class="squad-location"></span><h2 id="squad-outcome"></h2></div><p class="squad-score"></p></header>
+    <div class="squad-plot" aria-hidden="true"></div>
+    <ul class="squad-names" aria-label="Participantes de la presentación"></ul>
+    <div class="squad-actions"><time aria-hidden="true"></time><button type="button">Continuar</button></div>
   </section>
   <section id="match-result" class="screen" hidden><div class="panel"><span class="eyebrow">NODO 09 / RESULTADO</span><h2 id="result-title"></h2><div id="result-scores"></div><div id="result-medals" aria-label="Medallas conseguidas"></div><button id="result-restart" class="primary">VOLVER A JUGAR ↗</button><button id="result-menu" class="secondary">Menú de partida</button></div></section><div id="fatal" hidden role="alert"><h2>No se pudo iniciar WebGL.</h2><p id="fatal-text"></p><button onclick="location.reload()">Volver a intentar</button></div>
   <noscript>Este prototipo necesita JavaScript activado.</noscript>

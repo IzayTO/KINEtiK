@@ -29,6 +29,7 @@ export class Arsenal{
   const trigger=this.selected===1&&this.mode==='semi'?edge:edge||input.fire||this.selected===0&&this.queuedAttack;
   const slot=this.slots[this.selected];if(!trigger||this.time+1e-8<slot.ready)return;
   if(this.selected!==0&&slot.ammo===0){if(edge)emit({type:'empty'});return;}
+  this.lastUsed=this.weapon.id;
   if(this.selected===0){const combo=this.combo++%3,duration=[.42,.44,.52][combo];this.attack={combo,start:this.time,duration,hit:false};this.queuedAttack=false;slot.ready=this.time+duration;emit({type:'swing',weapon:'knife',combo});return;}
   slot.ammo--;if(this.selected===2)this.pumpAt=this.time+(this.shotgunMode==='pump'?.15:.09);this.lastShot=this.time;this.shots++;const spread=this.spread(context);this.bloom=Math.min(.32,this.bloom+.09);
   // Carry only one interval of fractional scheduling error; no idle backlog.

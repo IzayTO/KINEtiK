@@ -12,9 +12,17 @@ import {FieldView} from './field-view.js';
 import {clamp,damp} from './physics.js';
 import {obstruction,angleDelta} from './navigation.js';
 export class V3World extends V2World{
- constructor(canvas,level,params,options={}){super(canvas,level,params,options);this.mapExtent=Math.max(level.width,level.depth)+8;this.match=null;this.soldiers=null;this.buildSky();this.environment=new NightEnvironment(this);this.field=new FieldView(this);this.rcView=new RCView(this);this.supportView=new SupportView(this);this.atomicView=new NuclearView(this);this.stars=new Stars(this);this.bloodMarks=new BloodMarks(this.scene);this.tracePool=[];this.traceIndex=0;for(let i=0;i<14;i++){const g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(new Float32Array(6),3));const line=new T.Line(g,new T.LineBasicMaterial({color:0xfbd28a,transparent:true,opacity:.65,depthWrite:false}));line.frustumCulled=false;line.visible=false;this.scene.add(line);this.tracePool.push({line,life:0});}}
+ constructor(canvas,level,params,options={}){super(canvas,level,params,options);this.mapExtent=Math.max(level.width,level.depth)+8;this.match=null;this.soldiers=null;
+  // Store the resting transforms before a reload or a pump animates these parts.
+  this.restingWeaponParts=new Map([this.models[1].mag,this.models[2].pump].map(part=>{
+   part.updateMatrix();return [part,part.matrix.clone()];
+  }));
+  const skyStart=this.scene.children.length;
+  this.buildSky();this.environment=new NightEnvironment(this);
+  this.mapBackdrop.push(...this.scene.children.slice(skyStart));
+  this.field=new FieldView(this);this.rcView=new RCView(this);this.supportView=new SupportView(this);this.atomicView=new NuclearView(this);this.stars=new Stars(this);this.bloodMarks=new BloodMarks(this.scene);this.tracePool=[];this.traceIndex=0;for(let i=0;i<14;i++){const g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(new Float32Array(6),3));const line=new T.Line(g,new T.LineBasicMaterial({color:0xfbd28a,transparent:true,opacity:.65,depthWrite:false}));line.frustumCulled=false;line.visible=false;this.scene.add(line);this.tracePool.push({line,life:0});}}
  dispose(){this.soldiers?.dispose();this.soldiers=null;const geometries=new Set(),materials=new Set(),textures=new Set();for(const scene of [this.scene,this.gunScene])scene.traverse(o=>{if(o.geometry)geometries.add(o.geometry);for(const m of o.material?(Array.isArray(o.material)?o.material:[o.material]):[]){materials.add(m);for(const v of Object.values(m))if(v?.isTexture)textures.add(v);}});for(const t of textures)t.dispose();for(const g of geometries)g.dispose();for(const m of materials)m.dispose();this.scene.clear();this.gunScene.clear();this.renderer?.renderLists.dispose();}
- buildTargets(){this.architecture=this.shootables.slice();this.targets=[];this.targetBatches=[];this.targetPlates=[];}
+ buildTargets(){this.mapBackdrop=this.scene.children.slice();this.architecture=this.shootables.slice();this.targets=[];this.targetBatches=[];this.targetPlates=[];}
  updateTargets(){}
  resetTargets(){}
  attachMatch(match){this.match=match;this.field.attach(match);this.environment.setMode(match.config.environment);this.bloodMarks.attach(match.blood);this.soldiers?.dispose();this.soldiers=new SoldierBatch(this.scene,[...match.bots,match.player]);if(!this.crateMesh)this.buildCrates();if(!this.lootVisuals)this.lootVisuals=new LootVisuals(this.scene,match.supplies.drops);this.atomicView.attach();}
