@@ -9,7 +9,8 @@ const stages={
  nodo09:{x:0,z:35.8,dx:0,dz:1},
  airport:{x:17,z:19.5,dx:-.70,dz:-.714}
 };
-const cameraDistance=9.6;
+const cameraDistance=4.35;
+const waistHeight=.97;
 const rightHand=new T.Vector3(),leftHand=new T.Vector3(),palmOffset=new T.Vector3();
 
 export function formation(map,count){
@@ -18,47 +19,48 @@ export function formation(map,count){
  const right=new T.Vector3(-forward.z,0,forward.x);
  const center=new T.Vector3(stage.x,.025,stage.z);
  const eye=center.clone().addScaledVector(forward,-cameraDistance);
- eye.y=1.27;
- const leftCount=Math.ceil((count-1)/2),rightCount=count-1-leftCount;
- const places=Array.from({length:count},(_,i)=>{
-  const lane=Math.ceil(i/2),side=i%2?-1:1;
-  const depth=i===0?0:.56+lane*.28;
-  // Space the columns in projection as the wings recede from the camera.
-  const columns=side<0?leftCount:rightCount;
-  const offset=i===0?0:side*1.15*lane*(leftCount/columns)*(1+depth/cameraDistance);
-  const foot=center.clone().addScaledVector(right,offset).addScaledVector(forward,depth);
-  const yaw=Math.atan2(foot.x-eye.x,foot.z-eye.z);
-  return {foot,yaw};
- });
+ eye.y+=waistHeight;
+ const facing=foot=>Math.atan2(foot.x-eye.x,foot.z-eye.z);
+ const places=count>0?[{foot:center.clone(),yaw:facing(center),side:0,lane:0}]:[];
+ let previousDepth=0,slope=0;
+ for(let lane=1;places.length<count;lane++){
+  const depth=.56+(lane-1)*.40;
+  // Measure spacing at the two helmets' mean projected scale. Shoulders can
+  // overlap while the visors keep their own columns, even at the far end.
+  slope+=.295*.5*(1/(cameraDistance+previousDepth)+1/(cameraDistance+depth));
+  const offset=slope*(cameraDistance+depth);
+  for(const side of [-1,1]){
+   const foot=center.clone().addScaledVector(forward,depth).addScaledVector(right,side*offset);
+   places.push({foot,yaw:facing(foot),side,lane});
+   if(places.length===count)break;
+  }
+  previousDepth=depth;
+ }
  return {center,eye,right,forward,places};
 }
 
-// Fit standing silhouettes inside the space left by the real header, labels and button.
-// The perspective remains isotropic. The optical center can move for asymmetric safe areas.
+// A level camera at waist height puts every soldier's abdomen on the same
+// crop line, even though the wings are farther back. The name rail begins there.
 export function frameSquad(camera,layout,width,height,frame){
  camera.position.copy(layout.eye);
- camera.up.set(0,1,0);
- camera.lookAt(layout.center.x,1.01,layout.center.z);
+ camera.lookAt(layout.center.x,layout.eye.y,layout.center.z);
  camera.updateMatrixWorld(true);
- let extent=0,top=-Infinity,bottom=Infinity;
  const point=new T.Vector3();
- for(const {foot} of layout.places)for(const side of [-1,1])for(const y of [0,1.91]){
-  point.copy(foot).addScaledVector(layout.forward,-.23).addScaledVector(layout.right,side*.72);
-  point.y+=y;
-  point.applyMatrix4(camera.matrixWorldInverse);
-  extent=Math.max(extent,Math.abs(point.x/-point.z));
-  top=Math.max(top,point.y/-point.z);
-  bottom=Math.min(bottom,point.y/-point.z);
+ let top=0,helmets=0,hands=0;
+ for(const {foot} of layout.places){
+  point.copy(foot).applyMatrix4(camera.matrixWorldInverse);
+  const depth=-point.z,x=Math.abs(point.x);
+  top=Math.max(top,(1.89-waistHeight)/(depth-.21));
+  helmets=Math.max(helmets,(x+.24)/(depth-.21));
+  hands=Math.max(hands,(x+.49)/(depth-.35));
  }
- const focal=Math.min(frame.width/(2*extent),frame.height/(top-bottom));
- const opticalX=frame.x+frame.width/2;
- const opticalY=frame.y+frame.height/2+focal*(top+bottom)/2;
+ const opticalX=frame.x+frame.width/2,waistY=frame.y+frame.height;
+ const focal=Math.min(frame.height/top,frame.width/(2*helmets),Math.min(opticalX,width-opticalX)/hands);
  camera.fov=T.MathUtils.radToDeg(2*Math.atan(height/(2*focal)));
- camera.setViewOffset(width,height,width/2-opticalX,height/2-opticalY,width,height);
- camera.updateMatrixWorld(true);
+ camera.setViewOffset(width,height,width/2-opticalX,height/2-waistY,width,height);
  return layout.places.map(({foot})=>{
-  point.copy(foot).project(camera);
-  return {x:(1+point.x)*width/2,y:(1-point.y)*height/2};
+  point.copy(foot);point.y=layout.eye.y;point.project(camera);
+  return {x:(1+point.x)*width/2,y:waistY};
  });
 }
 
@@ -80,12 +82,18 @@ function firearmGeometry(model,rest){
 
 function pose(soldiers,rig,place,weapon,time){
  const id=rig.bot.id,phase=id*2.399+.4;
- const breath=Math.sin(time*(1.46+(id%4)*.07)+phase);
- const glance=Math.sin(time*.72+phase)*.062+Math.sin(time*.31+phase)*.027;
- const turn=Math.sin(phase)*.18,weight=Math.sin(phase+.9);
+ const breath=Math.sin(time*(1.48+(id%4)*.08)+phase);
+ const sway=Math.sin(time*(.79+(id%5)*.038)+phase+.7);
+ const look=Math.sin(time*(.89+(id%3)*.08)+phase);
+ // Linger briefly at the ends of a glance; each soldier has a different beat.
+ const glance=look*(1.4-.4*look*look);
+ const weight=Math.sin(phase+.9);
+ const sideAngle=place.side*Math.min(.59,.38+place.lane*.047);
+ const bodyTurn=sideAngle+.085*weight;
+ const faceTurn=sideAngle*.66;
  const {root,pelvis,abdomen,chest,neck,head,gun}=rig;
  root.position.copy(place.foot);
- root.rotation.set(0,place.yaw+turn,0);
+ root.rotation.set(0,place.yaw+bodyTurn,0);
  // The legs keep a fixed stance. Breathing and glances start above the belt.
  pelvis.position.y=.867;
  for(const leg of rig.legs){
@@ -94,28 +102,28 @@ function pose(soldiers,rig,place,weapon,time){
   leg.knee.rotation.x=-2*bend;
   leg.ankle.rotation.set(bend,0,-leg.hip.rotation.z);
  }
- abdomen.position.y=.19+breath*.005;
- abdomen.rotation.set(.012,-turn*.25,weight*.025);
- chest.rotation.set(.013*breath,-turn*.26+glance*.32,-weight*.02);
- neck.rotation.y=-turn*.49+glance*.68;
- head.rotation.set(-.014+breath*.015,.018*Math.sin(phase),weight*.027);
+ abdomen.position.y=.19+breath*.010;
+ abdomen.rotation.set(.015+.015*breath,.032*sway,.023*weight);
+ chest.rotation.set(.035*breath,.069*sway,.027*sway-.028*weight);
+ neck.rotation.y=faceTurn-bodyTurn+(place.side === 0 ? .22 : .14)*glance;
+ head.rotation.set(-.025+.054*Math.sin(time*.92+phase),.027*Math.sin(time*.53+phase),.040*sway+.025*weight);
 
  const long=weapon==='rifle'||weapon==='shotgun'||weapon==='rocket';
  gun.rotation.order='YXZ';
  if(long){
   const scale=weapon==='rocket'?.71:.73;
   gun.scale.setScalar(scale);
-  gun.position.set(.135,-.058+breath*.007,-.235);
-  gun.rotation.set(-.17-.20*(.5+.5*weight)+breath*.014,1.04+.12*weight,-.10+.07*weight);
+  gun.position.set(.135,.012+breath*.018,-.245);
+  gun.rotation.set(-.11-.12*(.5+.5*weight)+breath*.046,1.04+.13*weight+.054*sway,-.09+.08*weight+.051*sway);
   rightHand.set(0,weapon==='rocket'?-.18:-.10,weapon==='rocket'?-.076:.055).multiplyScalar(scale).applyQuaternion(gun.quaternion).add(gun.position);
   leftHand.set(0,weapon==='rocket'?-.115:-.048,weapon==='shotgun'?-.43:-.38).multiplyScalar(scale).applyQuaternion(gun.quaternion).add(gun.position);
  }else{
   const knife=weapon==='knife';
-  gun.position.set(.29,-.19+breath*.008,-.19);
-  gun.rotation.set(knife?.16:.06,-1.16+.12*weight,weight*.10);
+  gun.position.set(.29,-.085+breath*.021,-.19);
+  gun.rotation.set((knife?.16:.06)+breath*.068,-1.16+.12*weight+.062*sway,weight*.10+.058*sway);
   gun.scale.setScalar(1);
   rightHand.copy(gun.position);
-  leftHand.set(-.22,-.27+breath*.005,-.17);
+  leftHand.set(-.22,-.15+breath*.014,-.18);
  }
  // armIK positions the wrist; the palm center lies just below that joint.
  palmOffset.set(0,.070,0).applyQuaternion(gun.quaternion);

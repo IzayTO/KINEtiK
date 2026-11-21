@@ -50,7 +50,8 @@ export class SquadPresentation{
    name.textContent=member.name;
    if(i===0){
     const badge=document.createElement('b');
-    badge.textContent='MVP';label.className='squad-mvp';label.append(badge);
+    badge.innerHTML='<svg aria-hidden="true" viewBox="0 0 24 18" fill="currentColor"><path d="m2 3 5.7 3.5L12 1l4.3 5.5L22 3l-2.2 10H4.2zM4.7 15h14.6v2H4.7z"/></svg>MVP';
+    label.className='squad-mvp';label.append(badge);
    }
    label.append(name);
    return label;
@@ -87,7 +88,7 @@ export class SquadPresentation{
    const p=order[i],left=i? (p.x-order[i-1].x)/2:p.x-frame.x;
    const right=i+1<order.length?(order[i+1].x-p.x)/2:frame.x+frame.width-p.x;
    const label=this.labels[p.i];
-   label.style.left=p.x+'px';label.style.top=(p.y+3)+'px';
+   label.style.left=p.x+'px';
    label.style.maxWidth=Math.max(1,2*Math.min(left,right)-3)+'px';
   }
   this.dirty=false;
