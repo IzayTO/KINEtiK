@@ -108,6 +108,11 @@
 <div id="tab-reticle" class="tab-content" hidden><p class="settings-note">Retícula centrada en el rayo real. La expansión muestra el cono de dispersión del arma equipada.</p><div class="reticle-options"><label>Diseño <select id="reticleStyle"><option value="dot">Punto</option><option value="cross">Cruz fina</option><option value="segments">Cuatro segmentos</option><option value="crossdot">Cruz y punto</option><option value="circle">Círculo fino</option><option value="square">Cuadrado abierto</option><option value="dynamic">Dinámica</option></select></label><label>Mira física K-09 <select id="sightShape"><option value="square">Cuadrada</option><option value="circle">Circular</option></select></label><label>Color <input id="reticleColor" type="color"></label></div><div id="reticle-settings" class="settings-grid"></div><div class="switches"><label><input id="reticleDot" type="checkbox"> Punto central</label><label><input id="reticleDynamic" type="checkbox"> Expansión según dispersión real</label></div><div class="reticle-preview" id="reticle-preview"></div><button id="reset-v2-settings" class="secondary">Restaurar controles y retícula</button></div>
     </div>
   </section>
+  <section id="match-verdict" role="dialog" aria-modal="true" aria-labelledby="verdict-title" aria-describedby="verdict-phrase" tabindex="-1" hidden>
+    <div class="verdict-vignette" aria-hidden="true"></div>
+    <div class="verdict-copy"><h2 id="verdict-title"></h2><p id="verdict-phrase"></p></div>
+    <div class="verdict-black" aria-hidden="true"></div>
+  </section>
   <section id="squad-presentation" role="dialog" aria-modal="true" aria-labelledby="squad-outcome" hidden>
     <header class="squad-heading"><div><span class="squad-location"></span><h2 id="squad-outcome"></h2></div><p class="squad-score"></p></header>
     <div class="squad-plot" aria-hidden="true"></div>

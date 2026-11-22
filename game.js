@@ -1,4 +1,5 @@
 import {SquadPresentation} from './squad-presentation.js';
+import {MatchEnding} from './match-verdict.js';
 import {OperationUI,medalIcon} from './operation-ui.js';
 import {SupportUI} from './support-ui.js';
 import {GameInterface,quickConfig} from './interface.js';
@@ -269,9 +270,10 @@ function showSquad(){
 }
 function showResult(){const r=match.result;$('result-title').textContent=(r.reason==='atomic'?'FIN ATÓMICO · ':'GANADOR · ')+r.winner;const medals=$('result-medals');medals.replaceChildren();for(const medal of r.medals||[]){const card=document.createElement('article');card.innerHTML=medalIcon(medal.icon);const title=document.createElement('b'),detail=document.createElement('small');title.textContent=medal.title;detail.textContent=medal.detail;card.append(title,detail);medals.append(card);}const table=document.createElement('table'),head=document.createElement('tr');for(const name of (['ctf','confirmed'].includes(r.mode)?['PARTICIPANTE','BAJAS','CAÍDAS',r.mode==='confirmed'?'CONFIRMADAS':'CAPTURAS']:['PARTICIPANTE','BAJAS','CAÍDAS'])){const th=document.createElement('th');th.textContent=name;head.append(th);}table.append(head);for(const a of r.ranked){const row=document.createElement('tr');for(const value of (['ctf','confirmed'].includes(r.mode)?[a.name,a.kills,a.deaths,a.captures]:[a.name,a.kills,a.deaths])){const td=document.createElement('td');td.textContent=value;if(value===a.name)td.className='name-'+a.team;row.append(td);}table.append(row);}$('result-scores').replaceChildren(table);if(['ctf','domination','confirmed'].includes(r.mode)){const score=document.createElement('p');score.textContent=`AZUL ${r.score.blue} · ROJO ${r.score.red} / ${r.mode==='ctf'?'CAPTURAS':'PUNTOS'}`;$('result-scores').prepend(score);}$('match-result').hidden=false;}
 function setupMatchUI(){
- presentation=new SquadPresentation($('squad-presentation'),()=>{
+ const squad=new SquadPresentation($('squad-presentation'),()=>{
   showResult();$('result-restart').focus({preventScroll:true});
  });
+ presentation=new MatchEnding($('match-verdict'),gameUI,squad);
  $('match-result').addEventListener('keydown',e=>e.stopPropagation());
  const fields=['map','mode','bots','difficulty','team','minutes','limit','quality','crateSeconds','environment','captureLimit','dominationLimit'];for(const key of fields){const el=$('match-'+key);el.value=String(matchConfig[key]);if(!el.value)el.value=String(MATCH_DEFAULTS[key]);}
  const refresh=()=>{const mode=$('match-mode').value;$('elimination-limit-field').firstChild.textContent=mode==='confirmed'?'Límite de confirmaciones':'Límite de eliminaciones';$('capture-limit-field').hidden=mode!=='ctf';$('domination-limit-field').hidden=mode!=='domination';$('elimination-limit-field').hidden=['ctf','domination'].includes(mode);$('match-team').disabled=$('match-mode').value==='ffa';const n=+$('match-bots').value;$('bot-count-label').textContent=n;$('bot-warning').textContent=n>=12?n+' bots · Mayor carga de CPU. Reduce la cantidad o usa IA adaptativa si baja la fluidez.':n+' bots · Perfiles y percepción activos.';};$('match-bots').oninput=refresh;$('match-mode').onchange=()=>{refresh();for(const b of document.querySelectorAll('[data-pick-mode]'))b.classList.toggle('selected',b.dataset.pickMode===$('match-mode').value);};refresh();
