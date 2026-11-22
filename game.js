@@ -16,6 +16,7 @@ import {setupV2Settings} from './settings-v2.js';
 import {refineLevel} from './refinements.js';
 import {Input} from './input.js';
 import {AudioFX} from './audio.js';
+import {InterfaceAudio} from './interface-audio.js';
 import {AimSupport} from './aim-support.js';
 import {CombatUI} from './combat-ui.js';
 import {FieldHUD} from './field-hud.js';
@@ -42,6 +43,7 @@ const saveSettings=()=>{try{localStorage.setItem(settingsKey,JSON.stringify(para
 let playing=false,started=false,view,input,player,level,clock,frame=0,lastTime=0;
 let fps=60,frameCount=0,frameSum=0,hudTime=0,hitTimer=0,hits=0,shots=0,playTime=0,footDistance=0,autoTime=0;
 const audio=new AudioFX(params),preferences=loadPreferences(),arsenal=new Arsenal();
+const interfaceAudio=new InterfaceAudio(audio);
 // Explicit diagnostic mode does not pretend to render a game. Normal startup always requires WebGL.
 const diagnostic=new URLSearchParams(location.search).has('qa');
 let presentation,visorEditor,editor,minimap,reticle,refreshV2,assistCache=null,assistTime=0,match,aimSupport,combatUI,fieldHUD,gameUI,supportUI,operationUI;
@@ -146,9 +148,9 @@ function tick(now){
         else if(action==='antidote'){if(!match.ordnance.antidote(match.player))toast('Sin intoxicación o sin antídotos');}
         else if(action==='reload'){if(match.player.throwAction)continue;match.player.held=null;input.throwableMode=false;match.supplies.cancel(match.player);if(arsenal.requestReload())audio.sound('reload');}
         else if(action==='bandage'||action==='mini'){if(!match.supplies.request(match.player,action))toast(match.player.consuming?'Ya estás usando un consumible':arsenal.reload?'Termina la recarga primero':'No necesitas ese consumible o no tienes unidades');}
-        else if(action==='autofire'){preferences.autoFire=!preferences.autoFire;aimSupport.fireId=null;savePreferences(preferences);toast('Autodisparo ADS '+(preferences.autoFire?'activado':'desactivado'));}
-        else if(action==='mode')arsenal.toggleMode();
-        else if(action==='assist'){preferences.assist=!preferences.assist;savePreferences(preferences);refreshV2();}
+        else if(action==='autofire'){preferences.autoFire=!preferences.autoFire;aimSupport.fireId=null;savePreferences(preferences);interfaceAudio.play('tap');toast('Autodisparo ADS '+(preferences.autoFire?'activado':'desactivado'));}
+        else if(action==='mode'){arsenal.toggleMode();interfaceAudio.play('tap');}
+        else if(action==='assist'){preferences.assist=!preferences.assist;savePreferences(preferences);refreshV2();interfaceAudio.play('tap');}
         else if(action==='ping')events.push({type:'ping'});
       }
       const remote=match.remote.engaged;if(remote)match.remote.control(sample);
@@ -273,7 +275,8 @@ function setupMatchUI(){
  const squad=new SquadPresentation($('squad-presentation'),()=>{
   showResult();$('result-restart').focus({preventScroll:true});
  });
- presentation=new MatchEnding($('match-verdict'),gameUI,squad);
+ interfaceAudio.bind(document);
+ presentation=new MatchEnding($('match-verdict'),gameUI,squad,kind=>interfaceAudio.play(kind));
  $('match-result').addEventListener('keydown',e=>e.stopPropagation());
  const fields=['map','mode','bots','difficulty','team','minutes','limit','quality','crateSeconds','environment','captureLimit','dominationLimit'];for(const key of fields){const el=$('match-'+key);el.value=String(matchConfig[key]);if(!el.value)el.value=String(MATCH_DEFAULTS[key]);}
  const refresh=()=>{const mode=$('match-mode').value;$('elimination-limit-field').firstChild.textContent=mode==='confirmed'?'Límite de confirmaciones':'Límite de eliminaciones';$('capture-limit-field').hidden=mode!=='ctf';$('domination-limit-field').hidden=mode!=='domination';$('elimination-limit-field').hidden=['ctf','domination'].includes(mode);$('match-team').disabled=$('match-mode').value==='ffa';const n=+$('match-bots').value;$('bot-count-label').textContent=n;$('bot-warning').textContent=n>=12?n+' bots · Mayor carga de CPU. Reduce la cantidad o usa IA adaptativa si baja la fluidez.':n+' bots · Perfiles y percepción activos.';};$('match-bots').oninput=refresh;$('match-mode').onchange=()=>{refresh();for(const b of document.querySelectorAll('[data-pick-mode]'))b.classList.toggle('selected',b.dataset.pickMode===$('match-mode').value);};refresh();

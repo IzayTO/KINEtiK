@@ -12,9 +12,30 @@ const PRESETS={
 };
 export class AudioFX{
  constructor(params){this.params=params;this.preferences={};this.ctx=null;this.voices=[];this.listener={x:0,y:0,z:0,yaw:0};this.maxVoices=14;this.lastStep=0;this.pending=[];}
- unlock(){try{if(!this.ctx){const C=globalThis.AudioContext||globalThis.webkitAudioContext;if(!C)return;this.ctx=new C();const n=this.ctx.sampleRate;this.noise=this.ctx.createBuffer(1,n,this.ctx.sampleRate);const data=this.noise.getChannelData(0);let last=0;for(let i=0;i<n;i++){last=(last+(Math.random()*2-1)*.2)/1.12;data[i]=last*3;}this.bank=createAudioBank(this.ctx);this.master=this.ctx.createGain();this.master.gain.value=.65;this.master.connect(this.ctx.destination);}if(this.ctx.state==='suspended')this.ctx.resume();}catch{this.ctx=null;}}
+ getContext(){
+  if(!this.ctx){
+   const Context=globalThis.AudioContext||globalThis.webkitAudioContext;
+   if(Context){try{this.ctx=new Context();}catch{return null;}}
+  }
+  return this.ctx;
+ }
+ unlock(){
+  const ctx=this.getContext();
+  if(!ctx)return;
+  if(!this.master){
+   try{
+    const n=ctx.sampleRate;this.noise=ctx.createBuffer(1,n,n);
+    const data=this.noise.getChannelData(0);let last=0;
+    for(let i=0;i<n;i++){last=(last+(Math.random()*2-1)*.2)/1.12;data[i]=last*3;}
+    this.bank=createAudioBank(ctx);
+    this.master=ctx.createGain();this.master.gain.value=.65;
+   }catch{return;}
+  }
+  if(!this.worldConnected){this.master.connect(ctx.destination);this.worldConnected=true;}
+  if(ctx.state!=='running')ctx.resume().catch(()=>{});
+ }
  setListener(p,yaw){if(this.master)this.master.gain.value=this.params.sound?.65:0;Object.assign(this.listener,{x:p.x,y:p.y,z:p.z,yaw});if(this.ctx?.state==='running')for(let i=this.pending.length-1;i>=0;i--)if(this.pending[i].at<=this.ctx.currentTime){const e=this.pending.splice(i,1)[0];this.sound(e.kind,e.position,true);}}
- sound(kind,position=null,secondary=false){if(kind==='shot')kind='rifle';const preset=PRESETS[kind];if(!preset||!this.params.sound||!this.ctx||this.ctx.state!=='running')return;const [category,baseDuration,freq,amp,priority]=preset,duration=BANK_SECONDS[kind]||baseDuration,volume=this.preferences['volume'+category[0].toUpperCase()+category.slice(1)]??.8;if(volume<=0)return;
+ sound(kind,position=null,secondary=false){if(kind==='shot')kind='rifle';const preset=PRESETS[kind];if(!preset||!this.params.sound||!this.worldConnected||this.ctx.state!=='running')return;const [category,baseDuration,freq,amp,priority]=preset,duration=BANK_SECONDS[kind]||baseDuration,volume=this.preferences['volume'+category[0].toUpperCase()+category.slice(1)]??.8;if(volume<=0)return;
   let gain=amp*volume,pan=0;if(position){const dx=position.x-this.listener.x,dz=position.z-this.listener.z,d=Math.hypot(dx,dz),max=['explosion','rocket-explosion','airstrike-impact'].includes(kind)?95:category==='weapons'?65:28;if(d>max)return;gain*=1/(1+d*d/80)*Math.max(0,1-d/max);pan=Math.max(-.92,Math.min(.92,(dx*Math.cos(this.listener.yaw)-dz*Math.sin(this.listener.yaw))/Math.max(2,d)));if(gain<.008)return;}
   if(this.voices.length>=this.maxVoices){const victim=this.voices.reduce((a,b)=>a.priority<b.priority?a:b);if(victim.priority>priority)return;try{victim.source.stop();victim.tone?.stop();}catch{}this.voices.splice(this.voices.indexOf(victim),1);}
   const ctx=this.ctx,t=ctx.currentTime,source=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),envelope=ctx.createGain(),panner=ctx.createStereoPanner?ctx.createStereoPanner():ctx.createGain();const baked=this.bank[kind];source.buffer=baked||this.noise;source.playbackRate.value=kind==='atomic-pulse'?1-.085*(this.atomicStage||1):baked?.96+Math.random()*.08:category==='steps'?.85:1;
@@ -24,7 +45,7 @@ export class AudioFX{
   if(!baked&&['ping-danger','airstrike-earned','airstrike-called','rc-start','rc-earned','rc-lost','shield-hit','spawn','supply','ping','elimination','capture','zone-captured','flag-taken','flag-return'].includes(kind)){const tone=ctx.createOscillator(),tg=ctx.createGain();tone.type=['spawn','supply','ping'].includes(kind)?'sine':'triangle';const hz=kind==='shotgun'?75:kind==='rifle'?130:kind==='elimination'?140:freq*.42;tone.frequency.setValueAtTime(hz,t);tone.frequency.exponentialRampToValueAtTime(kind==='spawn'||kind==='supply'?hz*1.6:hz*.45,t+duration);tg.gain.setValueAtTime(gain*.35,t);tg.gain.exponentialRampToValueAtTime(.0001,t+duration);tone.connect(tg);tg.connect(panner);tone.start(t);tone.stop(t+duration);voice.tone=tone;voice.tg=tg;}
   source.start(t,baked?0:Math.random()*.25);if(!secondary&&this.pending.length<24){const delay=kind==='rifle'?.09:kind==='pump'?.12:0;if(delay)this.pending.push({kind:'casing',at:t+delay,position:position?{...position}:null});}source.stop(t+duration);source.onended=()=>{const i=this.voices.indexOf(voice);if(i>=0)this.voices.splice(i,1);source.disconnect();filter.disconnect();envelope.disconnect();panner.disconnect();voice.tone?.disconnect();voice.tg?.disconnect();};
  }
- ambient(){if(!this.ctx||!this.params.sound)return;const volume=this.preferences.volumeAmbient??.12;if(this.wind){this.wind.gain.gain.setTargetAtTime(volume*.035,this.ctx.currentTime,.2);return;}const source=this.ctx.createBufferSource(),filter=this.ctx.createBiquadFilter(),gain=this.ctx.createGain();source.buffer=this.noise;source.loop=true;filter.type='lowpass';filter.frequency.value=180;gain.gain.value=volume*.035;source.connect(filter);filter.connect(gain);gain.connect(this.master);source.start();this.wind={source,filter,gain};}
+ ambient(){if(!this.worldConnected||!this.params.sound)return;const volume=this.preferences.volumeAmbient??.12;if(this.wind){this.wind.gain.gain.setTargetAtTime(volume*.035,this.ctx.currentTime,.2);return;}const source=this.ctx.createBufferSource(),filter=this.ctx.createBiquadFilter(),gain=this.ctx.createGain();source.buffer=this.noise;source.loop=true;filter.type='lowpass';filter.frequency.value=180;gain.gain.value=volume*.035;source.connect(filter);filter.connect(gain);gain.connect(this.master);source.start();this.wind={source,filter,gain};}
  motor(active,speed=0,turbo=false){if(!this.ctx||!this.master)return;const ctx=this.ctx,t=ctx.currentTime;if(active&&!this.engine){const gain=ctx.createGain(),filter=ctx.createBiquadFilter(),motor=ctx.createOscillator(),gear=ctx.createOscillator(),mix=ctx.createGain();filter.type='lowpass';filter.frequency.value=1800;gain.gain.value=0;motor.type='sawtooth';gear.type='sine';mix.gain.value=.22;motor.connect(filter);gear.connect(mix);mix.connect(filter);filter.connect(gain);gain.connect(this.master);motor.start();gear.start();this.engine={gain,filter,motor,gear,mix};}
   const e=this.engine;if(!e)return;const v=Math.min(1,speed/11.5),volume=(this.preferences.volumeEffects??.8)*(this.params.sound?1:0);e.gain.gain.setTargetAtTime(active?(0.025+.09*v)*volume:0,t,.055);e.motor.frequency.setTargetAtTime(95+v*260+(turbo?55:0),t,.065);e.gear.frequency.setTargetAtTime(340+v*820,t,.06);e.filter.frequency.setTargetAtTime(850+v*1850,t,.08);
  }
@@ -41,5 +62,10 @@ export class AudioFX{
   else a.gain.gain.setValueAtTime(0,t);
   a.tone.frequency.setTargetAtTime(hz,t,.065);a.undertone.frequency.setTargetAtTime(hz*.5,t,.065);a.filter.frequency.setTargetAtTime(age>ALARM_SECONDS?250+fade*1350:1600,t,.1);
  }
- suspend(){this.atomic(null);this.aircraft(null);this.motor(false);this.pending.length=0;if(this.ctx?.state==='running')this.ctx.suspend();}
+ suspend(){
+  this.atomic(null);this.aircraft(null);this.motor(false);this.pending.length=0;
+  // Pause the world mix. Menu and presentation cues use a separate output
+  // on this same context, so opening a menu cannot wake the wind or engines.
+  if(this.worldConnected){this.master.disconnect();this.worldConnected=false;}
+ }
 }

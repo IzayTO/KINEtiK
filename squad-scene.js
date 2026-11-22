@@ -109,9 +109,10 @@ function poseWeapon(rig,breath,sway,weight,density){
     gun.rotation.set(lerp(.69,.43,density)+weight*.045+breath*.027,1.30+sway*.06,-.10+weight*.06);
     break;
    case 'shoulder':
-    // The fore-end crosses the outer shoulder behind the hand, outside the helmet.
-    gun.position.set(rocket ? .285 : .255,(rocket ? .153 : .115)+breath*.008,-.235);
-    gun.rotation.set(.32+breath*.018,Math.PI+.50+.07*weight+.035*sway,-.11+weight*.04);
+    // Seat the stock on the right shoulder. The barrel slopes inward behind
+    // the helmet. The wider launcher needs extra clearance at the temple.
+    gun.position.set(rocket ? .242 : .285, (rocket ? .208 : .195)+breath*.007, rocket ? .219 : .15);
+    gun.rotation.set((rocket ? 1.07 : .906)+breath*.018, Math.PI-(rocket ? .94 : .90)+.026*weight+.018*sway, -.11+weight*.04);
     break;
    default:
     gun.position.set(.135,.012+breath*.018,-.245);
