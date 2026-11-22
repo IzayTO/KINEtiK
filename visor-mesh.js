@@ -67,4 +67,22 @@ export function visorMaterial(atlas, instanced) {
   return material;
 }
 
-export function armorGeometry(){const p=[],ring=[[-.32,-.5],[.32,-.5],[.5,-.32],[.5,.32],[.32,.5],[-.32,.5],[-.5,.32],[-.5,-.32]];const tri=(a,b,c)=>p.push(...a,...b,...c);for(let i=0;i<8;i++){const j=(i+1)%8,a=[ring[i][0]*.86,.5,ring[i][1]*.86],b=[ring[j][0]*.86,.5,ring[j][1]*.86],c=[ring[i][0],-.5,ring[i][1]],d=[ring[j][0],-.5,ring[j][1]];tri(a,c,b);tri(b,c,d);tri([0,.5,0],a,b);tri([0,-.5,0],d,c);}const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(p,3));g.computeVertexNormals();return g;}
+export function armorGeometry() {
+  const outline = [[-.32,-.5],[.32,-.5],[.5,-.32],[.5,.32],[.32,.5],[-.32,.5],[-.5,.32],[-.5,-.32]];
+  const top = outline.map(([x,z]) => [x*.86,.5,z*.86]);
+  const bottom = outline.map(([x,z]) => [x,-.5,z]);
+  const vertices = [];
+  function triangle(a,b,c) { vertices.push(...a,...b,...c); }
+  // Viewed from above, the outline runs clockwise. Each cap and bevel faces out.
+  for (let i=0; i<outline.length; i++) {
+    const j=(i+1)%outline.length;
+    triangle(top[i],top[j],bottom[i]);
+    triangle(top[j],bottom[j],bottom[i]);
+    triangle([0,.5,0],top[j],top[i]);
+    triangle([0,-.5,0],bottom[i],bottom[j]);
+  }
+  const geometry = new T.BufferGeometry();
+  geometry.setAttribute('position',new T.Float32BufferAttribute(vertices,3));
+  geometry.computeVertexNormals();
+  return geometry;
+}

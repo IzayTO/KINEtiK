@@ -1,5 +1,5 @@
 import {TEAM_MODES} from './objectives.js';
-import {SquadScene,frameSquad} from './squad-scene.js';
+import {SquadScene,REVEAL_SECONDS} from './squad-scene.js';
 
 export const PRESENTATION_SECONDS=60;
 const teamName=team=>team==='red'?'ROJO':'AZUL';
@@ -58,6 +58,7 @@ export class SquadPresentation{
   });
   this.names.replaceChildren(...this.labels);
   this.scene=new SquadScene(view,data.members);
+  this.panel.dataset.shot='intro';
   this.panel.hidden=false;
   document.body.classList.add('squad-showing');
   this.dirty=true;
@@ -72,16 +73,16 @@ export class SquadPresentation{
   const current=this.scene;
   this.timer=window.setTimeout(()=>{if(this.scene===current)this.finish();},PRESENTATION_SECONDS*1000);
   this.lastSecond=null;
-  this.started=performance.now();
+  this.started=null;
   this.lastFrame=-Infinity;
   this.button.focus({preventScroll:true});
-  this.frame(this.started);
+  this.frame(performance.now());
  }
  fit(){
   const screen=this.panel.getBoundingClientRect(),plot=this.plot.getBoundingClientRect();
   if(screen.width<1||screen.height<1||plot.height<1||plot.width<1)return;
   const frame={x:plot.left-screen.left,y:plot.top-screen.top,width:plot.width,height:plot.height};
-  const points=frameSquad(this.scene.camera,this.scene.layout,screen.width,screen.height,frame);
+  const points=this.scene.fit(screen.width,screen.height,frame);
   const order=points.map((p,i)=>({...p,i})).sort((a,b)=>a.x-b.x);
   // The label can use its column or wrap to a second line, including at phone widths.
   for(let i=0;i<order.length;i++){
@@ -101,7 +102,12 @@ export class SquadPresentation{
   if(!this.dirty&&now-this.lastFrame<1000/30-.5)return;
   if(this.dirty)this.fit();
   if(this.dirty)return;
-  this.scene.render((now-this.started)/1000,Math.min(.1,(now-this.lastFrame)/1000));
+  const age=this.started===null?0:Math.max(0,(now-this.started)/1000);
+  this.scene.render(age,Math.min(.1,(now-this.lastFrame)/1000));
+  // First-use shader compilation can take a frame on mobile. Start the hold
+  // after submitting the close-up so that loading cannot consume its half second.
+  if(this.started===null)this.started=performance.now();
+  if(age>=REVEAL_SECONDS&&this.panel.dataset.shot==='intro')this.panel.dataset.shot='team';
   this.lastFrame=now;
  }
  finish(){if(this.active){this.close();this.onContinue();}}
@@ -114,6 +120,7 @@ export class SquadPresentation{
   this.scene.dispose();this.scene=null;
   this.names.replaceChildren();this.labels=[];
   this.panel.hidden=true;
+  delete this.panel.dataset.shot;
   document.body.classList.remove('squad-showing');
  }
 }

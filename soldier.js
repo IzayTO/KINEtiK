@@ -19,18 +19,27 @@ export class SoldierBatch{
   for(const type of ['armor','box']){const parts=this.parts.filter(p=>p.type===type),mesh=new T.InstancedMesh(type==='armor'?this.geometry:this.boxGeometry,type==='armor'?this.material:this.ledMaterial,parts.length);if(type==='box')this.boxGeometry.setAttribute('visorSlot',new T.InstancedBufferAttribute(Float32Array.from(parts,p=>p.visorSlot??-1),1));mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);mesh.frustumCulled=false;mesh.userData.soldier=true;this.scene.add(mesh);parts.forEach((p,i)=>{p.index=i;mesh.setColorAt(i,color.setHex(p.color));});this.batches.push({mesh,parts,botCount:parts.filter(p=>!p.bot.human).length});}
  }
  build(bot){
-  const root=new T.Object3D(),pelvis=joint(root,0,.87,0),abdomen=joint(pelvis,0,.19,0),chest=joint(abdomen,0,.23,0),neck=joint(chest,0,.22,0),head=joint(neck,0,.13,0),parts=[];
+  const root=new T.Object3D(),pelvis=joint(root,0,.87,0),abdomen=joint(pelvis,0,.19,0),chest=joint(abdomen,0,.23,0),neck=joint(chest,0,.22,0),head=joint(neck,0,.075,0),parts=[];
   const add=(bone,size,pos,col,type='armor')=>{const o=joint(bone,...pos);o.scale.set(...size);const part={bone:o,color:col,type,bot,index:0,weapon:null};this.parts.push(part);parts.push(part);return part;};
-  add(pelvis,[.35,.24,.26],[0,0,0],C.suit);add(abdomen,[.30,.26,.22],[0,0,0],C.suit);add(chest,[.49,.36,.31],[0,0,0],C.plate);add(chest,[.24,.055,.02],[.08,-.05,-.165],C.orange,'box');add(chest,[.12,.05,.025],[-.15,.06,-.17],C[bot.team],'box');
-  add(neck,[.14,.16,.15],[0,0,0],C.joint);helmetParts((type,size,position,color)=>{const face=add(head,size,position,color,type==='screen'?'box':type);if(type==='screen')face.visorSlot=bot.id;});for(const side of [-1,1]){add(pelvis,[.115,.14,.10],[side*.16,.035,-.15],C.steel);add(chest,[.065,.06,.3],[side*.2,.19,0],C.plate);}
+  add(pelvis,[.35,.24,.26],[0,0,0],C.suit);add(abdomen,[.30,.26,.22],[0,0,0],C.suit);add(chest,[.49,.36,.31],[0,0,0],C.plate);
+  add(chest,[.22,.055,.030],[.06,-.05,-.149],C.orange,'box');
+  add(chest,[.105,.05,.030],[-.115,.06,-.144],C[bot.team],'box');
+  add(chest,[.207,.059,.186],[0,.172,0],C.suit);
+  add(neck,[.134,.146,.137],[0,-.006,0],C.joint);
+  // The head turns at the neck socket. Keep the shell and LEDs at their original rest height.
+  helmetParts((type,size,[x,y,z],color)=>{
+   const part=add(head,size,[x,y+.055,z],color,type==='screen'?'box':type);
+   if(type==='screen')part.visorSlot=bot.id;
+  });
+  for(const side of [-1,1]){add(pelvis,[.115,.14,.10],[side*.16,.035,-.15],C.steel);add(chest,[.065,.06,.3],[side*.2,.19,0],C.plate);}
   add(pelvis,[.36,.065,.29],[0,.035,0],C.steel,'box');add(pelvis,[.07,.06,.035],[0,.035,-.16],C.joint,'box');
   const arms=[],legs=[];
   for(const side of [-1,1]){
    const shoulder=joint(chest,side*.31,.12,0),elbow=joint(shoulder,0,-.29,0),wrist=joint(elbow,0,-.27,0),hand=joint(wrist,0,-.025,0);
-   add(shoulder,[.20,.30,.22],[0,-.10,0],C.suit);add(shoulder,[.20,.052,.23],[0,-.005,0],C[bot.team]);add(elbow,[.115,.11,.12],[0,.018,0],C.joint);add(elbow,[.16,.25,.18],[0,-.13,0],C.plate);add(wrist,[.10,.07,.12],[0,0,0],C.joint);add(hand,[.11,.11,.11],[0,-.045,0],C.suit);for(const x of [-.027,.027])add(hand,[.035,.065,.038],[x,-.10,-.025],C.joint,'box');
+   add(shoulder,[.197,.272,.215],[0,-.114,0],C.suit);add(shoulder,[.212,.064,.231],[0,.011,0],C[bot.team]);add(elbow,[.115,.11,.12],[0,.018,0],C.joint);add(elbow,[.16,.25,.18],[0,-.13,0],C.plate);add(wrist,[.10,.07,.12],[0,0,0],C.joint);add(hand,[.11,.11,.11],[0,-.045,0],C.suit);for(const x of [-.027,.027])add(hand,[.035,.065,.038],[x,-.10,-.025],C.joint,'box');
    arms.push({side,shoulder,elbow,wrist,hand});
    const hip=joint(pelvis,side*.145,-.04,0),knee=joint(hip,0,-.41,0),ankle=joint(knee,0,-.34,0),foot=joint(ankle,0,0,-.05);
-   add(hip,[.20,.37,.23],[0,-.18,0],C.suit);add(hip,[.15,.04,.015],[0,-.20,-.124],C.orange,'box');add(knee,[.135,.12,.14],[0,0,0],C.joint);add(knee,[.17,.14,.085],[0,-.025,-.09],C.steel);add(knee,[.18,.30,.20],[0,-.18,0],C.suit);add(ankle,[.15,.10,.16],[0,.02,0],C.steel);add(foot,[.19,.13,.34],[0,-.015,-.045],C.boot);hip.rotation.order='ZXY';legs.push({side,hip,knee,ankle,foot,floor:bot.body.y,nextSample:0});
+   add(hip,[.20,.37,.23],[0,-.18,0],C.suit);add(hip,[.15,.04,.022],[0,-.20,-.107],C.orange,'box');add(knee,[.135,.12,.14],[0,0,0],C.joint);add(knee,[.17,.14,.085],[0,-.025,-.09],C.steel);add(knee,[.18,.30,.20],[0,-.18,0],C.suit);add(ankle,[.15,.10,.16],[0,.02,0],C.steel);add(foot,[.19,.13,.34],[0,-.015,-.045],C.boot);hip.rotation.order='ZXY';legs.push({side,hip,knee,ankle,foot,floor:bot.body.y,nextSample:0});
   }
   // Weapon rests in the hands. Each weapon has its own silhouette; animation uses the same bones.
   const gun=joint(chest,.15,-.005,-.32),guns=[];
