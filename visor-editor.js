@@ -1,4 +1,4 @@
-import {BOTS, CELLS, ORIGINAL_GREEN, template, visors, sameDesign, colorCode, DesignHistory, slotName} from './visor-designs.js';
+import {BOTS, COLS, ROWS, CELLS, ORIGINAL_GREEN, template, visors, sameDesign, colorCode, DesignHistory, slotName} from './visor-designs.js';
 import {VisorBoard} from './visor-board.js';
 import {HelmetPreview} from './visor-preview.js';
 
@@ -21,6 +21,18 @@ function icon(name) { return '<svg aria-hidden="true" viewBox="0 0 24 24"><path 
 function button(action,label,symbol) {
   return '<button type="button" data-act="'+action+'">'+(symbol?icon(symbol):'')+'<span>'+label+'</span></button>';
 }
+// Pixel 22 exports RGB hex codes in row-major order, top-left to bottom-right.
+export function parsePixelArt(text) {
+  const tokens=text.trim()?text.trim().split(/\s+/):[];
+  if (tokens.length!==CELLS) throw new Error('Se necesitan '+CELLS+' colores ('+COLS+' × '+ROWS+'). Recibidos: '+tokens.length+'.');
+  const pixels=new Uint32Array(CELLS);
+  for (let i=0;i<CELLS;i++) {
+    if (!/^#[0-9a-f]{6}$/i.test(tokens[i]))
+      throw new Error('HEX inválido en fila '+(Math.floor(i/COLS)+1)+', columna '+(i%COLS+1)+'. Usa #RRGGBB.');
+    pixels[i]=parseInt(tokens[i].slice(1),16)+1; // 0 is off; #000000 is active black.
+  }
+  return pixels;
+}
 const slotOptions=Array.from({length:BOTS+1},(_,id)=>'<option value="'+id+'">'+slotName(id)+'</option>').join('');
 function editorMarkup() {
   return [
@@ -37,8 +49,10 @@ function editorMarkup() {
     '<div class="ve-colors"><strong>Color</strong>'+palette.map(([name,hex])=>'<button type="button" data-ink="'+hex+'" style="--ink:'+hex+'" aria-label="'+name+'" title="'+name+'"></button>').join('')+'<label class="ve-custom" title="Color personalizado">＋<input id="ve-color" type="color" aria-label="Color personalizado" value="#78f9d7"></label></div>',
     '<div class="ve-tools">'+[['pencil','Lápiz','pencil'],['erase','Borrador','erase'],['fill','Rellenar','fill'],['off','Apagar','off'],['undo','Deshacer','undo'],['redo','Rehacer','redo'],['original','Original','original']].map(item=>button(...item)).join('')+'</div></section>',
     '<section class="ve-card ve-preview"><header><h2>Vista previa 3D</h2></header><div class="ve-stage"><canvas id="ve-model" aria-label="Casco del personaje. Arrastra para girarlo."></canvas><span class="ve-preview-error" hidden>Vista 3D no disponible en este dispositivo.</span></div><div class="ve-stage-caption"><span id="ve-head-name"></span><span>Arrastra para girar</span></div></section></div>',
-    '<footer class="ve-footer"><label>Plantilla <select id="ve-template"><option value="eyes">Ojos</option><option value="bars">Barras</option><option value="original">Visor original</option></select></label>'+button('template','Aplicar')+'<div class="ve-files">'+button('export','Exportar JSON')+button('import','Importar JSON')+'</div><input id="ve-file" type="file" accept=".json,application/json,text/json" hidden></footer>',
-    '<p id="ve-status" role="status" aria-live="polite"></p>'
+    '<footer class="ve-footer"><label>Plantilla <select id="ve-template"><option value="eyes">Ojos</option><option value="bars">Barras</option><option value="original">Visor original</option></select></label>'+button('template','Aplicar')+'<div class="ve-files">'+button('export','Exportar JSON')+button('import','Importar JSON')+button('paste-art','Pegar 8x22-ART')+'</div><input id="ve-file" type="file" accept=".json,application/json,text/json" hidden></footer>',
+    '<p id="ve-status" role="status" aria-live="polite"></p>',
+    '<style>#visor-editor .ve-files{flex-wrap:wrap;max-width:100%}#visor-editor #ve-art-dialog{box-sizing:border-box;width:min(620px,calc(100% - 24px));max-height:calc(100dvh - 24px);overflow:auto;margin:auto;padding:16px;border:1px solid var(--line);border-radius:10px;background:#202d3a;color:var(--text);font:inherit}#ve-art-dialog::backdrop{background:rgba(8,14,22,.76)}#ve-art-dialog p{margin:9px 0;color:var(--sub)}#ve-art-dialog textarea{display:block;width:100%;min-height:92px;max-height:32dvh;resize:vertical;padding:10px;border:1px solid #526478;border-radius:6px;background:#101923;color:var(--text);font:16px/1.45 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;-webkit-user-select:text}#ve-art-dialog textarea:focus-visible{outline:2px solid var(--mint)}#ve-art-dialog #ve-art-error{min-height:1em;color:#ffb3a5}#ve-art-dialog .ve-art-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}#visor-editor [data-act=apply-art]{background:var(--mint);border-color:#c0fff1;color:#0a302c}</style>',
+    '<dialog id="ve-art-dialog" aria-labelledby="ve-art-title"><h2 id="ve-art-title">Pegar 8x22-ART</h2><p id="ve-art-target"></p><p>En Pixel 22 pulsa Copiar colores HEX y pega aquí los 176 colores. Se aplicarán de izquierda a derecha, desde la primera fila hasta la octava.</p><textarea id="ve-art-text" aria-label="Colores HEX del diseño" rows="5" maxlength="8192" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="#000000 #FFAA00 #FFFFFF …"></textarea><p id="ve-art-error" role="alert"></p><div class="ve-art-actions">'+button('cancel-art','Cancelar')+button('apply-art','Cargar')+'</div></dialog>'
   ].join('');
 }
 
@@ -62,13 +76,21 @@ export class VisorEditor {
     this.el('slot').onchange=e=>this.select(Number(e.target.value));
     this.el('color').oninput=e=>this.useColor(e.target.value);
     this.el('file').onchange=e=>this.loadFile(e.target);
+    const artDialog=this.el('art-dialog');
+    artDialog.addEventListener('keydown',e=>{
+      e.stopPropagation(); // Keep text editing and clipboard shortcuts native.
+      if (e.key==='Escape') { e.preventDefault(); artDialog.close(); }
+    });
+    artDialog.addEventListener('cancel',e=>{e.preventDefault();e.stopPropagation();artDialog.close();});
+    this.el('art-text').addEventListener('input',()=>{this.el('art-error').textContent='';});
     this.dialog.addEventListener('keydown',e=>{
       e.stopPropagation();
       if (e.key==='Escape') { e.preventDefault(); this.close(); }
       if ((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z') { e.preventDefault(); this.action(e.shiftKey?'redo':'undo'); }
     });
     this.dialog.addEventListener('cancel',e=>{e.preventDefault();this.close();});
-    this.dialog.addEventListener('close',()=>{
+    this.dialog.addEventListener('close',e=>{
+      if(e.target!==this.dialog) return;
       this.opened=false; this.observer.disconnect(); this.board.cancel();
       cancelAnimationFrame(this.frame); this.frame=0;
       document.getElementById('open-visor')?.focus();
@@ -85,8 +107,9 @@ export class VisorEditor {
     }
     this.select(this.slot); this.act('close').focus();
   }
-  close() { this.board.cancel(); this.dialog.close(); }
+  close() { this.el('art-dialog').close(); this.board.cancel(); this.dialog.close(); }
   select(slot) {
+    if(this.el('art-dialog').open) this.el('art-dialog').close();
     this.board.cancel(); this.slot=slot; this.pixels=this.library.get(slot);
     this.el('slot').value=String(slot); this.el('head-name').textContent=slotName(slot);
     this.dialog.querySelector('.ve-copy').hidden=true; this.act('copy').setAttribute('aria-expanded','false');
@@ -143,6 +166,24 @@ export class VisorEditor {
       }
       case 'export': this.download(); return;
       case 'import': this.el('file').click(); return;
+      case 'paste-art': {
+        const dialog=this.el('art-dialog');
+        if(dialog.open) return;
+        this.el('art-target').textContent='Destino: '+slotName(this.slot)+'. Reemplaza únicamente este visor.';
+        this.el('art-text').value=''; this.el('art-error').textContent='';
+        dialog.showModal(); this.el('art-text').focus(); return;
+      }
+      case 'cancel-art': this.el('art-dialog').close(); return;
+      case 'apply-art': {
+        if(!this.el('art-dialog').open) return;
+        let pixels;
+        try { pixels=parsePixelArt(this.el('art-text').value); }
+        catch(error) { this.el('art-error').textContent=error.message; return; }
+        this.replace(pixels);
+        this.el('art-dialog').close();
+        this.status('176 colores cargados en '+slotName(this.slot)+(this.library.lastSaved?'. Guardado en este dispositivo.':'. Cambio en memoria. Exporta una copia.'));
+        return;
+      }
     }
     this.redraw(false);
   }
