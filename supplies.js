@@ -23,6 +23,7 @@ export class Supplies{
   // Fixed positions over the valid crate footprint: no loot behind walls or on another floor.
   const amounts=[c.rifle,c.shotgun,c.id%2===0?3:0,c.id%2===1?3:0,m.rng()<.32?1:0,c.rifle?12:0,c.shotgun?4:0];
   for(let i=0;i<types.length;i++){const d=this.drops[c.id*types.length+i];d.amount=amounts[i];d.active=d.amount>0;d.born=m.time;d.flyStart=-100;d.collector=null;d.x=c.x+(i%2?1:-1)*.24;d.y=c.y+.52+(i>1?.3:0);d.z=c.z+(i>=5?-.31:i>1?.18:-.18);if(i>=5)d.x=c.x+(i===5?-.36:.36);}
+  if(!a.human)a.lootUntil=m.time+.8;
   m.events.push({type:'crate',actor:a.id,position:{x:c.x,y:c.y,z:c.z}});return true;
  }
  request(a,kind){const def=CONSUMABLES[kind],m=this.match;if(!def||!a.alive||!m.running||m.ended||a.consuming||m.time<a.consumeUntil)return false;
@@ -30,19 +31,36 @@ export class Supplies{
   a.opening=null;a.consuming={kind,start:m.time,end:m.time+def.seconds};m.events.push({type:'consume',actor:a.id,kind});return true;
  }
  cancel(a){a.consuming=null;a.opening=null;}
- pickup(a,d){const m=this.match;if((d.kind==='rocket'&&!a.human)||!d.active||d.amount<=0||m.time-d.born<.35||m.time-d.flyStart<.36||!this.reachable(a,d,1.6))return 0;let added=0;
+ pickup(a,d){const m=this.match;if(!d.active||d.amount<=0||m.time-d.born<.35||m.time-d.flyStart<.36||!this.reachable(a,d,1.6))return 0;let added=0;
   if(['rifle','shotgun','pistol','sniper'].includes(d.kind))added=a.arsenal.supply(...['rifle','shotgun','pistol','sniper'].map(kind=>d.kind===kind?d.amount:0));
   else if(d.kind==='rocket'){added=Math.min(d.amount,3-(a.equipment.rocket||0));a.equipment.rocket+=added;}
   else{const max=CONSUMABLES[d.kind].max;added=Math.min(d.amount,max-a.inventory[d.kind]);a.inventory[d.kind]+=added;}
   if(!added){if(a.human&&m.time-a.maxNotice>1.5){a.maxNotice=m.time;m.events.push({type:'supply-full',actor:a.id,kind:d.kind});}return 0;}
   d.amount-=added;d.active=d.amount>0;d.flyStart=m.time;d.collector=a;d.flyAmount=added;m.events.push({type:'supply',actor:a.id,kind:d.kind,amount:added,position:{x:d.x,y:d.y,z:d.z}});return added;
  }
+ planForBot(b){
+  const m=this.match,slots=b.arsenal.slots;
+  const missing=i=>slots[i].ammo+slots[i].reserve===0;
+  const rifle=missing(3)||slots[1].ammo<12&&slots[1].reserve<35,shells=missing(2)||missing(4);
+  const hurt=b.health<76&&!b.inventory.bandage,weak=b.shield<76&&!b.inventory.mini;
+  if(!rifle&&!shells&&!hurt&&!weak)return false;
+  if(b.target&&slots.slice(1).some(s=>s.ammo>0))return false;
+  let best=null,nearest=Infinity;
+  for(const c of m.crates){
+   if(!c.available||!(rifle&&c.rifle||shells&&c.shotgun||hurt&&c.id%2===0||weak&&c.id%2===1))continue;
+   const d=Math.hypot(c.x-b.body.x,c.y-b.body.y,c.z-b.body.z);
+   if(d<nearest){best=c;nearest=d;}
+  }
+  if(!best)return false;
+  b.state='REABASTECER';m.setGoal(b,best);return true;
+ }
  step(dt){const m=this.match;
   for(const c of m.crates)if(!c.available&&m.time>=c.ready){for(let i=0;i<types.length;i++){const d=this.drops[c.id*types.length+i];d.active=false;d.amount=0;}m.stock(c);c.lid=0;}
   for(const a of m.actors){if(!a.alive){this.cancel(a);continue;}
    if(a.consuming){const use=a.consuming,def=CONSUMABLES[use.kind];if(m.time+1e-8>=use.end){a[def.stat]=Math.min(100,a[def.stat]+def.value);a.inventory[use.kind]--;a.consuming=null;a.consumedKind=use.kind;a.consumedAt=m.time;a.consumeUntil=m.time+.25;m.events.push({type:'healed',actor:a.id,kind:use.kind});}}
+   if(!a.human&&m.botRemote?.active&&m.botRemote.owner===a)continue;
    if(!a.human){if(!a.consuming&&!a.target){if(a.health<76&&a.inventory.bandage)this.request(a,'bandage');else if(a.shield<76&&a.inventory.mini)this.request(a,'mini');}
-    const needy=a.arsenal.slots[1].reserve<180||a.arsenal.slots[2].reserve<28||a.health<76||a.shield<76;
+    const needy=a.arsenal.slots[1].reserve<180||a.arsenal.slots[2].reserve<28||a.arsenal.slots[3].reserve<12||a.arsenal.slots[4].reserve<4||a.health<76||a.shield<76;
     const c=needy?this.nearest(a):null;this.hold(a,c?.id,dt,!!c&&flat(a.body,c)<1.55);
    }
    for(const d of this.drops)if(d.active)this.pickup(a,d);

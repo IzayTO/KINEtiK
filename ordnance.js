@@ -82,6 +82,18 @@ export class Ordnance{
   if(time<b.evadeUntil)return true;
   if(b.poison&&time-b.poison.start>diff.reaction+.35)this.antidote(b);
   if(time<b.nextThrow||b.throwAction)return false;
+  if(b.equipment.rocket>0&&b.target&&time>=b.recognizedAt){
+   const t=pos(b.target),origin=launchState(b,b.yaw,b.pitch);
+   const dx=t.x-origin.x,dy=t.y-origin.y,dz=t.z-origin.z,range=Math.hypot(dx,dy,dz);
+   if(range>22&&range<55&&obstruction(m.world.colliders,origin,t)>.999&&
+      !m.actors.some(a=>a!==b&&a.alive&&!m.enemy(b,a)&&distance(a.body,t)<18)){
+    const yaw=Math.atan2(-dx,-dz),pitch=Math.atan2(dy,Math.hypot(dx,dz));
+    if(this.select(b,'rocket')){
+     if(this.trigger(b,yaw,pitch)){b.nextThrow=time+8;return true;}
+     b.held=null;
+    }
+   }
+  }
   const observed=b.target&&time>=b.recognizedAt&&m.visible(b,b.target,32,false),recent=!observed&&b.memory?.confirmed&&time-b.lastSeen<2.5&&time<b.memory.expires;
   if(!observed&&!recent)return false;const target=observed?b.target.body:b.memory;
   b.nextThrow=time+4;const d=distance(p,target);if(d<7||d>30)return false;

@@ -7,9 +7,23 @@ export function carModel(){const root=new T.Group(),wheels=[],mat=new Map();cons
  root.userData.wheels=wheels;return root;
 }
 export class RCView{
- constructor(view){this.view=view;this.model=carModel();view.scene.add(this.model);this.model.visible=false;this.angle=0;this.position=new T.Vector3();this.cameraPosition=new T.Vector3();this.wasActive=false;this.timer=0;}
+ constructor(view){this.view=view;this.model=carModel();view.scene.add(this.model);this.model.visible=false;this.botModel=null;this.angle=0;this.position=new T.Vector3();this.cameraPosition=new T.Vector3();this.wasActive=false;this.timer=0;}
  thumbnail(){return modelThumbnail(this.model);}
  update(dt,alpha){const v=this.view,r=v.match?.remote;if(!r)return;this.model.visible=r.active;
+  const botCar=v.match.botRemote;
+  if(botCar.active){
+   if(!this.botModel){
+    this.botModel=new T.Group();this.botWheels=[];
+    for(const part of this.model.children){
+     const copy=part.clone(false);this.botModel.add(copy);
+     if(this.model.userData.wheels.includes(part))this.botWheels.push(copy);
+    }
+    v.scene.add(this.botModel);
+   }
+   const p=botCar.body,car=this.botModel;car.visible=true;
+   car.position.set(p.previous.x+(p.x-p.previous.x)*alpha,p.previous.y+(p.y-p.previous.y)*alpha,p.previous.z+(p.z-p.previous.z)*alpha);
+   car.rotation.y=botCar.yaw;for(const wheel of this.botWheels)wheel.rotation.x-=p.speed*dt/.115;
+  }else if(this.botModel)this.botModel.visible=false;
   if(r.engaged&&v.match.player.alive){const p=r.body;this.position.set(p.previous.x+(p.x-p.previous.x)*alpha,p.previous.y+(p.y-p.previous.y)*alpha,p.previous.z+(p.z-p.previous.z)*alpha);this.model.position.copy(this.position);const goal=p.speed>.2?Math.atan2(-p.vx,-p.vz):r.yaw;this.angle+=Math.atan2(Math.sin(goal-this.angle),Math.cos(goal-this.angle))*(1-Math.exp(-12*dt));this.model.rotation.y=this.angle;for(const wheel of this.model.userData.wheels)wheel.rotation.x-=p.speed*dt/.115;
    v.camera.position.copy(this.position);v.camera.position.y+=.53;v.camera.rotation.set(r.pitch,r.yaw,0,'YXZ');v.camera.updateMatrixWorld(true);v.gunScene.visible=false;v.field.preview.visible=false;this.wasActive=true;
   }else if(this.wasActive){v.gunScene.visible=true;this.wasActive=false;}

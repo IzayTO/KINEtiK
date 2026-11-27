@@ -9,6 +9,9 @@ import {segment} from './weapon-models.js';
 const kinds=['grenade','molotov','gas','antidote','rocket'];
 export class FieldView{
  constructor(view){this.view=view;this.matrix=new T.Matrix4();this.temp=new T.Object3D();this.color=new T.Color();this.right=new T.Vector3();this.up=new T.Vector3();this.itemMaterial=new T.MeshLambertMaterial({vertexColors:true});this.projectileBatches=kinds.map(kind=>{const mesh=new T.InstancedMesh(itemGeometry(kind==='rocket'?'rocket-projectile':kind),this.itemMaterial,PROJECTILE_LIMIT+21);mesh.count=0;mesh.frustumCulled=false;mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);view.scene.add(mesh);return mesh;});
+  this.launchers=new T.InstancedMesh(itemGeometry('rocket'),this.itemMaterial,21);
+  this.launchers.frustumCulled=false;this.launchers.count=0;this.launchers.visible=false;
+  this.launchers.instanceMatrix.setUsage(T.DynamicDrawUsage);view.scene.add(this.launchers);
   this.effects=new FieldEffects(view);
   this.preview=new ThrowGuide();view.scene.add(this.preview);
   this.prediction=null;
@@ -23,11 +26,15 @@ export class FieldView{
   if(match.config.mode==='ctf')for(const f of match.objectives.flags){const root=new T.Group(),pole=new T.Mesh(new T.CylinderGeometry(.025,.025,1.65,6),new T.MeshLambertMaterial({color:0xc4ccc3}));pole.position.y=.825;root.add(pole);const cloth=new T.Mesh(new T.BoxGeometry(.78,.48,.018),new T.MeshBasicMaterial({color:f.team==='blue'?0x55b6ff:0xff665b}));cloth.position.set(.39,1.35,0);root.add(cloth);this.view.scene.add(root);this.flags.push(root);}
  }
  update(dt,p,input,alpha,charms){const m=this.match;if(!m)return;const time=m.time,o=m.ordnance;this.right.setFromMatrixColumn(this.view.camera.matrixWorld,0);this.up.setFromMatrixColumn(this.view.camera.matrixWorld,1);
+  this.launchers.count=0;
   for(let k=0;k<kinds.length;k++){const mesh=this.projectileBatches[k];let count=0;for(const q of o.projectiles)if(q.active&&q.kind===kinds[k]){this.temp.position.set(q.previous.x+(q.x-q.previous.x)*alpha,q.previous.y+(q.y-q.previous.y)*alpha,q.previous.z+(q.z-q.previous.z)*alpha);this.temp.rotation.set(q.rest?0:(time-q.born)*5,q.spin,0);if(q.kind==='rocket')this.temp.rotation.set(Math.asin(clamp(q.vy/52,-1,1)),Math.atan2(-q.vx,-q.vz),0,'YXZ');this.temp.scale.setScalar(1);this.temp.updateMatrix();mesh.setMatrixAt(count++,this.temp.matrix);
-   if(charms&&q.kind!=='rocket')charms.actors.add(q.owner.id,q.kind,this.temp.matrix,q.rest?0:Math.sin((time-q.born)*9)*.15);
-  }for(const r of this.view.soldiers?.rigs||[]){const b=r.bot,kind=time-b.antidoteAt<.6?'antidote':b.throwAction?.kind||b.held;if((b.human&&!this.match.remote.engaged)||!b.alive||kind!==kinds[k]||(b.throwAction?.released&&kind!=='antidote'))continue;this.matrix.copy(r.arms[1].wrist.matrixWorld);this.temp.position.set(0,-.015,0);this.temp.rotation.set(.3,0,0);this.temp.scale.setScalar(1);this.temp.updateMatrix();this.matrix.multiply(this.temp.matrix);mesh.setMatrixAt(count++,this.matrix);
+   if(charms&&q.kind!=='rocket')charms.actors.add(q.owner.id,q.kind,this.temp.matrix,q.rest?0:Math.sin((time-q.born)*9)*.18);
+  }for(const r of this.view.soldiers?.rigs||[]){const b=r.bot,kind=time-b.antidoteAt<.6?'antidote':b.throwAction?.kind||b.held;if((b.human&&!this.match.remote.engaged)||!b.alive||kind!==kinds[k]||(b.throwAction?.released&&kind!=='antidote'&&kind!=='rocket'))continue;this.matrix.copy(r.arms[1].wrist.matrixWorld);this.temp.position.set(0,-.015,0);this.temp.rotation.set(.3,0,0);this.temp.scale.setScalar(1);this.temp.updateMatrix();this.matrix.multiply(this.temp.matrix);
+   if(kind==='rocket')this.launchers.setMatrixAt(this.launchers.count++,this.matrix);
+   else mesh.setMatrixAt(count++,this.matrix);
    if(charms)charms.actors.add(b.id,kind,this.matrix,charms.angles[b.id],charms.angles[b.id]*.28);
   }mesh.count=count;mesh.visible=count>0;mesh.instanceMatrix.needsUpdate=true;}
+  this.launchers.visible=this.launchers.count>0;if(this.launchers.visible)this.launchers.instanceMatrix.needsUpdate=true;
   this.effects.update(time);
   this.rings.forEach((mesh,i)=>{const z=m.objectives.zones[i],team=z.contested?null:z.occupant||z.owner;mesh.material.color.set(team==='blue'?0x56baff:team==='red'?0xff7565:0xa8b1af);});
   this.flags.forEach((root,i)=>{const f=m.objectives.flags[i];root.position.set(f.x,f.y+(f.state==='carried'?.5:0),f.z);root.children[1].rotation.y=Math.sin(time*2+i)*.09;});

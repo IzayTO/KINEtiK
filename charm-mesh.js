@@ -154,10 +154,12 @@ export class CharmBatch{
 export function swingTarget(time,actor){
  const arsenal=actor.arsenal,body=actor.body,phase=time*(body.speed>8?10.2:7.1)+actor.id*.72;
  const stride=Math.min(1,body.speed/10);
+ const running=!body.sliding&&(body.state==='SPRINT'||body.state==='CORRIENDO');
+ const motion=running?.83:1.24;
  const age=arsenal.time-arsenal.lastShot;
  const kick=age>=0&&age<.42?Math.sin(age*29)*Math.exp(-age*8)*.27:0;
- return Math.sin(phase)*(.026+stride*.31)+(body.sliding?-.19:0)+kick+
-  (arsenal.reload?Math.sin(arsenal.reloadProgress*Math.PI*2)*.23:0);
+ return motion*(Math.sin(phase)*(.026+stride*.31)+(body.sliding?-.19:0)+kick+
+  (arsenal.reload?Math.sin(arsenal.reloadProgress*Math.PI*2)*.23:0));
 }
 export class MatchCharms{
  constructor(view){

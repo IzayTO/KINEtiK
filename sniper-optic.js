@@ -1,5 +1,5 @@
 export const OPTIC_STEPS=Object.freeze([1.5,2,3,4]);
-const retainedZoom=Object.freeze({1.5:.60,2:.70,3:.80,4:.85});
+const retainedZoom=Object.freeze({1.5:.45,2:.55,3:.65,4:.75});
 export const opticDiameter=(width,height)=>.84*Math.min(width,height);
 export function opticZoom(width,height,verticalFov,mark,normalHorizontalFov){
  const previousFocal=opticDiameter(width,height)*(100/1.04)*(mark/4);
