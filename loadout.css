@@ -1,0 +1,25 @@
+#optic-mask{position:fixed;inset:0;z-index:2;pointer-events:none;overflow:hidden;display:grid;place-items:center}
+#hud[hidden]~#optic-mask,#hud:not(.scoped)~#optic-mask,.support-targeting #optic-mask,.hud-editing #optic-mask,.verdict-showing #optic-mask,.squad-showing #optic-mask,#optic-mask[hidden],#optic-step[hidden]{display:none}
+.optic-glass{position:relative;width:84vmin;height:84vmin;border-radius:50%;box-shadow:0 0 0 155vmax #000,inset 0 0 0 2px #111;overflow:hidden}
+.optic-glass::before,.optic-glass::after{content:"";position:absolute;inset:0;margin:auto;background:#192125}
+.optic-glass::before{height:1px;width:100%}.optic-glass::after{height:100%;width:1px}
+.optic-glass i{position:absolute;z-index:1;left:50%;top:50%;width:3px;height:3px;border-radius:50%;background:#ffbf76;transform:translate(-50%,-50%)}
+#optic-step{position:fixed;left:max(env(safe-area-inset-left),calc(50% - 39vmin));top:65%;z-index:6;min-width:52px;min-height:44px;border:1px solid #b2c8c5;border-radius:8px;background:#18242dee;color:#f0f7f4;font-weight:700;pointer-events:auto;touch-action:none}
+#hud.scoped #reticle{visibility:hidden}
+#weapon-slots{display:flex}#weapon-slots button{flex:1 1 0;width:0;min-width:0}#weapon-slots button small{top:2px;bottom:auto;right:3px}
+#tab-personalization .visor-entry+.visor-entry{margin-top:12px}
+.charm-loadout,.charm-recipients{width:min(1280px,100%);margin-inline:auto}
+.charm-loadout,.charm-recipients>div:first-child{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.charm-loadout label{display:flex;align-items:center;gap:6px;color:var(--sub);font-size:12px}
+.charm-recipients{padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.charm-checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:5px;padding-top:8px}
+.charm-checks label{display:flex;align-items:center;gap:6px;min-height:35px;font-size:12px;cursor:pointer}
+#charm-editor .ve-panels,#charm-editor .ve-head,#charm-editor .ve-footer,#charm-editor .charm-loadout{flex-shrink:0}
+#charm-grid{aspect-ratio:24/10}
+#charm-editor .ve-files{flex-wrap:wrap}
+.hud-editing #optic-step{display:none}
+.charm-collection{width:min(1280px,100%);margin-inline:auto;flex-shrink:0}
+.charm-collection summary{cursor:pointer;font-weight:650;padding:6px 0}
+.charm-collection>div,.charm-collection label{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.charm-collection input,.charm-collection select{max-width:min(220px,75vw)}
+@media(max-height:550px) and (orientation:landscape){#charm-editor .ve-head{padding-bottom:2px}#charm-editor .ve-head button,#charm-editor .charm-loadout button,#charm-editor select{min-height:30px}#charm-grid{max-height:40dvh}}

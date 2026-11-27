@@ -3,7 +3,7 @@ import {clamp} from './physics.js';
 import {obstruction} from './navigation.js';
 export const CONSUMABLES=Object.freeze({bandage:{name:'VENDAJE',seconds:3.5,value:25,stat:'health',max:9},mini:{name:'MINIESCUDO',seconds:2,value:25,stat:'shield',max:9}});
 export const OPEN_SECONDS=1;
-const types=['rifle','shotgun','bandage','mini','rocket'];
+const types=['rifle','shotgun','bandage','mini','rocket','pistol','sniper'];
 const flat=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
 const chest=a=>({x:a.body.x,y:a.body.y+a.body.height*.7,z:a.body.z});
 export class Supplies{
@@ -21,8 +21,8 @@ export class Supplies{
  hold(a,id,dt,held){const c=this.match.crates[id];if(!held||!this.match.running||this.match.ended||!c?.available||!this.reachable(a,c)){a.opening=null;return false;}if(a.consuming)return false;if(a.opening?.id!==id)a.opening={id,progress:0};a.opening.progress+=dt/OPEN_SECONDS;if(a.opening.progress+1e-8>=1){this.open(c,a);a.opening=null;return true;}return false;}
  open(c,a){if(!c.available)return false;const m=this.match;c.available=false;c.lid=1;c.ready=m.time+clamp(m.config.crateSeconds,15,60);c.openedAt=m.time;
   // Fixed positions over the valid crate footprint: no loot behind walls or on another floor.
-  const amounts=[c.rifle,c.shotgun,c.id%2===0?3:0,c.id%2===1?3:0,m.rng()<.32?1:0];
-  for(let i=0;i<types.length;i++){const d=this.drops[c.id*types.length+i];d.amount=amounts[i];d.active=d.amount>0;d.born=m.time;d.flyStart=-100;d.collector=null;d.x=c.x+(i%2?1:-1)*.24;d.y=c.y+.52+(i>1?.3:0);d.z=c.z+(i>1?.18:-.18);}
+  const amounts=[c.rifle,c.shotgun,c.id%2===0?3:0,c.id%2===1?3:0,m.rng()<.32?1:0,c.rifle?12:0,c.shotgun?4:0];
+  for(let i=0;i<types.length;i++){const d=this.drops[c.id*types.length+i];d.amount=amounts[i];d.active=d.amount>0;d.born=m.time;d.flyStart=-100;d.collector=null;d.x=c.x+(i%2?1:-1)*.24;d.y=c.y+.52+(i>1?.3:0);d.z=c.z+(i>=5?-.31:i>1?.18:-.18);if(i>=5)d.x=c.x+(i===5?-.36:.36);}
   m.events.push({type:'crate',actor:a.id,position:{x:c.x,y:c.y,z:c.z}});return true;
  }
  request(a,kind){const def=CONSUMABLES[kind],m=this.match;if(!def||!a.alive||!m.running||m.ended||a.consuming||m.time<a.consumeUntil)return false;
@@ -31,7 +31,7 @@ export class Supplies{
  }
  cancel(a){a.consuming=null;a.opening=null;}
  pickup(a,d){const m=this.match;if((d.kind==='rocket'&&!a.human)||!d.active||d.amount<=0||m.time-d.born<.35||m.time-d.flyStart<.36||!this.reachable(a,d,1.6))return 0;let added=0;
-  if(d.kind==='rifle'||d.kind==='shotgun')added=a.arsenal.supply(d.kind==='rifle'?d.amount:0,d.kind==='shotgun'?d.amount:0);
+  if(['rifle','shotgun','pistol','sniper'].includes(d.kind))added=a.arsenal.supply(...['rifle','shotgun','pistol','sniper'].map(kind=>d.kind===kind?d.amount:0));
   else if(d.kind==='rocket'){added=Math.min(d.amount,3-(a.equipment.rocket||0));a.equipment.rocket+=added;}
   else{const max=CONSUMABLES[d.kind].max;added=Math.min(d.amount,max-a.inventory[d.kind]);a.inventory[d.kind]+=added;}
   if(!added){if(a.human&&m.time-a.maxNotice>1.5){a.maxNotice=m.time;m.events.push({type:'supply-full',actor:a.id,kind:d.kind});}return 0;}

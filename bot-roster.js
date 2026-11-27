@@ -14,7 +14,19 @@ export function botNames(count,random=Math.random){
 }
 
 // A callsign stays with its numbered visor across rematches and map changes.
-const callsigns=botNames(20);
+function loadCallsigns(){
+ const key='kinetik-bot-callsigns-v1';
+ let storage;
+ try{
+  storage=globalThis.localStorage;
+  const list=JSON.parse(storage?.getItem(key)||'null');
+  if(Array.isArray(list)&&list.length===20&&new Set(list).size===20&&list.every(name=>BOT_TAGS.includes(name)))return list;
+ }catch{}
+ const list=botNames(20);
+ try{storage?.setItem(key,JSON.stringify(list));}catch{}
+ return list;
+}
+const callsigns=loadCallsigns();
 export const botName=id=>callsigns[id-1];
 let previousAllies=new Set();
 

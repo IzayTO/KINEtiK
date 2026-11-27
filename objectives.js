@@ -1,3 +1,4 @@
+import {botWeaponSlot} from './combat.js';
 import {distance,obstruction} from './navigation.js';
 import {clamp} from './physics.js';
 export const TEAM_MODES=['tdm','ctf','domination','confirmed'];
@@ -34,7 +35,7 @@ export class Objectives{
    this.scoreClock+=dt;while(this.scoreClock>=1){this.scoreClock--;for(const z of this.zones)if(z.owner)m.score[z.owner]++;}
   }
  }
- botGoal(b){if(!this.active||!b.alive)return false;const m=this.match,time=m.time;if(b.target&&time>=b.recognizedAt&&!b.held&&!b.throwAction){const d=distance(b.body,b.target.body),slots=b.arsenal.slots,slot=d<2.6?0:d<11&&slots[2].ammo+slots[2].reserve>0?2:slots[1].ammo+slots[1].reserve>0?1:slots[2].ammo+slots[2].reserve>0?2:0;if(b.arsenal.select(slot))m.events.push({type:'switch',actor:b.id,position:{x:b.body.x,y:b.body.y,z:b.body.z}});}
+ botGoal(b){if(!this.active||!b.alive)return false;const m=this.match,time=m.time;if(b.target&&time>=b.recognizedAt&&!b.held&&!b.throwAction){const d=distance(b.body,b.target.body),slot=botWeaponSlot(b.arsenal,d,b.id);if(b.arsenal.select(slot))m.events.push({type:'switch',actor:b.id,position:{x:b.body.x,y:b.body.y,z:b.body.z}});}
   if(time<(b.nextObjective||0)&&b.goal)return true;b.nextObjective=time+.65;
   if(!b.carrying&&b.arsenal.slots[1].ammo+b.arsenal.slots[1].reserve<12){let supply=null,best=Infinity;for(const c of m.crates){const d=distance(b.body,c);if(c.available&&c.rifle&&d<best){best=d;supply=c;}}if(supply){b.state='REABASTECER';m.setGoal(b,supply);return true;}}
   let goal=null,role='OBJETIVO';

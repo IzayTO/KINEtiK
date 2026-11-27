@@ -15,7 +15,7 @@ export class Accolades{
   if(weapon==='knife')this.medal('knife','A FILO','Sin gastar una bala','blade',2);
   if(source.body.sliding)this.medal('slide','RASANTE','Baja en deslizamiento','wing',2);
   else if(!source.body.grounded)this.medal('air','EN EL AIRE','Baja sin tocar suelo','wing',2);
-  if(options.distance>=35&&['rifle','shotgun'].includes(weapon))this.medal('distance','LARGA DISTANCIA',Math.round(options.distance)+' metros','cross',3);
+  if(options.distance>=35&&['rifle','shotgun','pistol','sniper'].includes(weapon))this.medal('distance','LARGA DISTANCIA',Math.round(options.distance)+' metros','cross',3);
   if(source.health<=20)this.medal('survivor','AL LÍMITE','Con la vida justa','shield',6);
   if(['grenade','rocket','rc','airstrike'].includes(weapon))this.medal('blast','DEMOLICIÓN','Baja explosiva','burst',3);
  }

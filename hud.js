@@ -8,7 +8,7 @@ export const HUD_ITEMS=[
  ['.fire-button','Disparo',76,76,.79,.77,1],['.aim-button','Apuntar',47,47,.76,.48,1],
  ['.reload-button','Recarga',43,43,.91,.40,1],['.ping-button','Marcador',40,40,.65,.43,1],
  ['.assist-button','Asistencia',40,40,.65,.60,1],['.auto-fire-button','Autodisparo',48,48,.22,.62,1],['.mode-button','Modo de disparo',42,42,.65,.78,1],
- ['weapon-slots','Armas largas',200,58,.49,.93,1],['slot-knife','Cuchillo',47,44,.40,.79,1],['slot-grenade','Granada',47,44,.46,.79,1],['slot-molotov','Molotov',47,44,.52,.79,1],['slot-gas','Gas N-09',47,44,.58,.79,1],['slot-antidote','Antídoto',44,105,.34,.86,1],['slot-rc','RC explosivo',48,66,.26,.86,1],['slot-rocket','Lanzacohetes',55,66,.20,.86,1],['slot-airstrike','Apoyo aéreo',55,66,.14,.86,1],['objective-panel','Objetivos',180,110,.79,.38,0],['minimap','Minimapa',108,108,.095,.25,0],
+ ['weapon-slots','Armas de fuego',200,58,.49,.93,1],['slot-knife','Cuchillo',47,44,.40,.79,1],['slot-grenade','Granada',47,44,.46,.79,1],['slot-molotov','Molotov',47,44,.52,.79,1],['slot-gas','Gas N-09',47,44,.58,.79,1],['slot-antidote','Antídoto',44,105,.34,.86,1],['slot-rc','RC explosivo',48,66,.26,.86,1],['slot-rocket','Lanzacohetes',55,66,.20,.86,1],['slot-airstrike','Apoyo aéreo',55,66,.14,.86,1],['objective-panel','Objetivos',180,110,.79,.38,0],['minimap','Minimapa',108,108,.095,.25,0],
  ['.weapon-info','Munición',190,65,.85,.19,0],
  ['consumable-slots','Consumibles',118,44,.45,.61,1],['kill-feed','Bajas',250,78,.32,.27,0],
  ['health-bar','Vida',156,30,.28,.88,0],['shield-bar','Escudo',156,30,.28,.80,0],['score-bar','Puntuación',176,34,.50,.07,0],['match-status','Partida',176,28,.50,.15,0],

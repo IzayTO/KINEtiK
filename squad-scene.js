@@ -1,3 +1,4 @@
+import {CharmBatch} from './charm-mesh.js';
 import * as T from './three.module.min.js';
 import {SoldierBatch} from './soldier.js';
 import {itemGeometry} from './field-models.js';
@@ -15,7 +16,7 @@ export const REVEAL_SECONDS=2.5;
 const {lerp,smoothstep,smootherstep,radToDeg,degToRad}=T.MathUtils;
 const longPoses=['relaxed','raised','shoulder'];
 const shortPoses=['low','chest','forward'];
-const isLong=weapon=>weapon==='rifle'||weapon==='shotgun'||weapon==='rocket';
+const isLong=weapon=>weapon==='rifle'||weapon==='shotgun'||weapon==='sniper'||weapon==='rocket';
 const rightHand=new T.Vector3(),leftHand=new T.Vector3(),palmOffset=new T.Vector3();
 
 export function formation(map,count){
@@ -133,7 +134,7 @@ function poseWeapon(rig,breath,sway,weight,density){
    default: gun.position.set(.29,-.145+breath*.017,-.16);
   }
   gun.rotation.set((knife?.16:.06)+breath*.068,-1.16+.12*weight+.062*sway,(portraitPose==='chest'?-.24:.03)+weight*.10+.058*sway);
-  rightHand.copy(gun.position);
+  if(weapon==='pistol')rightHand.set(0,-.10,.04).applyQuaternion(gun.quaternion).add(gun.position);else rightHand.copy(gun.position);
   leftHand.set(-.25,-.23+breath*.012,-.15);
  }
  // armIK takes wrist positions. Offset from each grip to its wrist in the
@@ -225,7 +226,7 @@ export class SquadScene{
   this.weaponMaterial=new T.MeshLambertMaterial({vertexColors:true,flatShading:true});
   for(const kind of new Set(members.map(a=>a.weapon))){
    const model=view.models.find(m=>m.kind===kind);
-   const merged=kind==='rifle'||kind==='shotgun';
+   const merged=!!model?.rear;
    const geometry=merged?firearmGeometry(model,view.restingWeaponParts):
     kind==='knife'?model.item.geometry:itemGeometry(kind);
    const rigs=this.soldiers.rigs.filter(r=>r.bot.weapon===kind);
@@ -235,6 +236,7 @@ export class SquadScene{
    this.group.add(mesh);
    this.weapons.push({mesh,rigs,merged});
   }
+  this.charms=new CharmBatch(this.group,view.charms.atlas,members.length);
   this.group.traverse(node=>node.layers.set(PHOTO_LAYER));
   this.skyPosition=view.sky.position.clone();
   view.sky.position.copy(this.layout.eye);
@@ -292,11 +294,12 @@ export class SquadScene{
    for(const part of parts)mesh.setMatrixAt(part.index,part.bone.matrixWorld);
    mesh.instanceMatrix.needsUpdate=true;
   }
+  this.charms.begin();
   for(const {mesh,rigs} of this.weapons){
-   rigs.forEach((rig,i)=>mesh.setMatrixAt(i,rig.gun.matrixWorld));
+   rigs.forEach((rig,i)=>{mesh.setMatrixAt(i,rig.gun.matrixWorld);this.charms.add(rig.bot.id,rig.bot.weapon,rig.gun.matrixWorld,Math.sin(time*1.8+rig.bot.id)*.025);});
    mesh.instanceMatrix.needsUpdate=true;
   }
-  this.view.environment.update(dt,this.layout.center);
+  this.charms.end();this.view.environment.update(dt,this.layout.center);
   const renderer=this.view.renderer;
   if(renderer){
    renderer.clear();renderer.render(this.view.scene,this.camera);
@@ -304,7 +307,7 @@ export class SquadScene{
   }
  }
  dispose(){
-  this.soldiers.dispose();
+  this.charms.dispose();this.soldiers.dispose();
   for(const {mesh,merged} of this.weapons){mesh.dispose();if(merged)mesh.geometry.dispose();}
   this.weaponMaterial.dispose();
   this.group.removeFromParent();

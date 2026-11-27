@@ -24,8 +24,8 @@ export class CombatUI{
  onEvent(e){const m=this.match;if(e.type==='elimination'){
    this.feed.push({killer:e.killerName||m.actors.find(a=>a.id===e.killer)?.name||'Jugador',victim:e.victimName||'Soldado',killerTeam:e.killerTeam,victimTeam:e.victimTeam,phrase:this.phrases.next(e.weapon)});
   }
-  if(e.actor!==0)return;if(e.type==='supply-full')this.toast(['rifle','shotgun'].includes(e.kind)?'Munición máx.':'Consumibles máx.');
-  if(e.type==='supply')this.toast('+'+e.amount+' '+({rifle:'cartuchos K-09',shotgun:'cartuchos S-07',bandage:'vendajes',mini:'miniescudos'}[e.kind]||'munición'));
+  if(e.actor!==0)return;if(e.type==='supply-full')this.toast(['rifle','shotgun','pistol','sniper'].includes(e.kind)?'Munición máx.':'Consumibles máx.');
+  if(e.type==='supply')this.toast('+'+e.amount+' '+({rifle:'cartuchos K-09',shotgun:'cartuchos S-07',pistol:'cartuchos P-12',sniper:'cartuchos L-04',bandage:'vendajes',mini:'miniescudos'}[e.kind]||'munición'));
  }
  project(x,y,z){const v=this.vector;v.set(x,y,z).project(this.view.camera);return v.z>-1&&v.z<1&&Math.abs(v.x)<.96&&Math.abs(v.y)<.94;}
  updateFeed(time,editing){const entries=this.feed.update(time);

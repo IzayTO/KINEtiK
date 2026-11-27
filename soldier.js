@@ -1,4 +1,5 @@
 import {armorGeometry,helmetParts,VisorAtlas,visorMaterial} from './visor-mesh.js';
+import {PropParts} from './prop-geometry.js';
 import {visors} from './visor-designs.js';
 import * as T from './three.module.min.js';
 import {clamp,damp,surfaceY} from './physics.js';
@@ -10,12 +11,37 @@ const Y=new T.Vector3(0,-1,0),v=new T.Vector3(),q=new T.Quaternion(),matrix=new 
 
 const C={suit:0x354d49,plate:0xb3b3a7,joint:0x263c39,orange:0xe97b31,visor:0x78f9d7,steel:0x66756d,boot:0x324843,red:0xd85d51,blue:0x4b97d6};
 function joint(parent,x=0,y=0,z=0){const o=new T.Object3D();o.position.set(x,y,z);parent.add(o);return o;}
+// Compact world models. Only actors carrying a P-12 or L-04 submit an instance.
+function rangedMesh(scene,kind,material,capacity){
+ const art=new PropParts();
+ if(kind==='pistol'){
+  art.box(C.steel,[0,.026,-.077],[.079,.063,.224]);
+  art.box(C.joint,[0,-.063,.01],[.068,.14,.075],[-.14,0,0]);
+  art.box(C.suit,[0,.015,-.182],[.041,.037,.045]);
+ }else{
+  art.box(C.steel,[0,0,-.16],[.094,.09,.45]);
+  art.box(C.joint,[0,.014,-.54],[.038,.04,.37]);
+  art.box(C.joint,[0,.015,-.734],[.058,.06,.08]);
+  art.box(C.suit,[0,-.024,.126],[.074,.11,.20]);
+  art.box(C.joint,[0,-.075,-.087],[.064,.10,.083]);
+  art.box(C.suit,[0,.063,-.102],[.044,.074,.136]);
+  art.add(new T.CylinderGeometry(.041,.041,.22,8),C.joint,[0,.111,-.111],[Math.PI/2,0,0]);
+ }
+ const mesh=new T.InstancedMesh(art.finish(),material,capacity);
+ mesh.count=0;mesh.visible=false;mesh.frustumCulled=false;mesh.userData.soldier=true;
+ mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);scene.add(mesh);return mesh;
+}
 export class SoldierBatch{
  constructor(scene,bots,poseSource=null){this.scene=scene;this.parts=[];this.rigs=[];this.ownsAppearance=!poseSource;
   this.material=poseSource?.material??new T.MeshLambertMaterial({color:0xffffff,flatShading:true});
   this.geometry=poseSource?.geometry??armorGeometry();this.boxGeometry=new T.BoxGeometry(1,1,1);
   this.visorAtlas=poseSource?.visorAtlas??new VisorAtlas(visors);this.ledMaterial=poseSource?.ledMaterial??visorMaterial(this.visorAtlas,true);
   for(const b of bots)this.rigs.push(this.build(b));this.batches=[];
+  this.ranged=[];
+  if(this.ownsAppearance){
+   this.rangedMaterial=new T.MeshLambertMaterial({vertexColors:true,flatShading:true});
+   this.ranged=[rangedMesh(scene,'pistol',this.rangedMaterial,bots.length),rangedMesh(scene,'sniper',this.rangedMaterial,bots.length)];
+  }
   for(const type of ['armor','box']){const parts=this.parts.filter(p=>p.type===type),mesh=new T.InstancedMesh(type==='armor'?this.geometry:this.boxGeometry,type==='armor'?this.material:this.ledMaterial,parts.length);if(type==='box')this.boxGeometry.setAttribute('visorSlot',new T.InstancedBufferAttribute(Float32Array.from(parts,p=>p.visorSlot??-1),1));mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);mesh.frustumCulled=false;mesh.userData.soldier=true;this.scene.add(mesh);parts.forEach((p,i)=>{p.index=i;mesh.setColorAt(i,color.setHex(p.color));});this.batches.push({mesh,parts,botCount:parts.filter(p=>!p.bot.human).length});}
  }
  build(bot){
@@ -43,11 +69,13 @@ export class SoldierBatch{
   }
   // Weapon rests in the hands. Each weapon has its own silhouette; animation uses the same bones.
   const gun=joint(chest,.15,-.005,-.32),guns=[];
-  for(let id=0, count=this.ownsAppearance?3:0;id<count;id++){const group=joint(gun),start=parts.length;if(id===0){add(group,[.04,.05,.12],[0,0,0],C.joint);const blade=add(group,[.055,.016,.26],[.06,0,.18],C.steel);blade.bone.rotation.y=.55;}else{add(group,[.09,.11,.23],[0,0,-.06],C.joint);add(group,[id===1?.09:.12,.08,.25],[0,0,-.29],id===1?C.suit:C.steel);add(group,[.028,.03,.30],[0,.015,-.48],C.joint,'box');add(group,[.09,.12,.10],[0,-.015,.14],C.suit);if(id===1)add(group,[.06,.16,.07],[0,-.10,-.10],C.steel);else add(group,[.03,.03,.32],[0,-.04,-.35],C.suit,'box');}for(let j=start;j<parts.length;j++)parts[j].weapon=id;guns.push(group);}
+  for(let id=0, count=this.ownsAppearance?3:0;id<count;id++){const group=joint(gun),start=parts.length;if(id===0){add(group,[.04,.05,.12],[0,0,0],C.joint);const blade=add(group,[.055,.016,.26],[.06,0,.18],C.steel);blade.bone.rotation.y=.55;}
+   else{add(group,[.09,.11,.23],[0,0,-.06],C.joint);add(group,[id===1?.09:.12,.08,.25],[0,0,-.29],id===1?C.suit:C.steel);add(group,[.028,.03,.30],[0,.015,-.48],C.joint,'box');add(group,[.09,.12,.10],[0,-.015,.14],C.suit);if(id===1)add(group,[.06,.16,.07],[0,-.10,-.10],C.steel);else add(group,[.03,.03,.32],[0,-.04,-.35],C.suit,'box');}for(let j=start;j<parts.length;j++)parts[j].weapon=id;guns.push(group);}
   return{bot,root,pelvis,abdomen,chest,neck,head,arms,legs,gun,guns,parts,phase:bot.id*.81,bodyYaw:bot.yaw,pose:0,hit:0,death:0,land:0,previousGround:true,alive:bot.alive,speed:0,moving:0,air:0,bank:0,vx:0,vz:0,accel:0,recoil:0};
  }
  armIK(arm,target){const shoulder=arm.shoulder.position,dx=target.x-shoulder.x,dy=target.y-shoulder.y,dz=target.z-shoulder.z,L1=.29,L2=.27,d=clamp(Math.hypot(dx,dy,dz),.09,.555),dir=ikDir.set(dx,dy,dz).normalize(),bend=ikBend.set(arm.side*.8,-.6,.1);bend.addScaledVector(dir,-bend.dot(dir)).normalize();const a=(L1*L1-L2*L2+d*d)/(2*d),h=Math.sqrt(Math.max(0,L1*L1-a*a));const elbow=ikElbow.copy(dir).multiplyScalar(a).addScaledVector(bend,h);arm.shoulder.quaternion.setFromUnitVectors(Y,ikUnit.copy(elbow).normalize());v.set(dx,dy,dz).sub(elbow).normalize().applyQuaternion(q.copy(arm.shoulder.quaternion).invert());arm.elbow.quaternion.setFromUnitVectors(Y,v);}
  update(dt,alpha,time,showPlayer=false){
+  for(const mesh of this.ranged)mesh.count=0;
   for(const r of this.rigs){const b=r.bot;if(b.human&&!showPlayer)continue;const p=b.body,s=p.speed,alive=b.alive;const x=p.previous.x+(p.x-p.previous.x)*alpha,z=p.previous.z+(p.z-p.previous.z)*alpha,y=p.previous.y+(p.y-p.previous.y)*alpha;
    // Animation follows continuous velocity, independently of the slower AI decisions.
    if(alive&&!r.alive){r.bodyYaw=b.bodyYaw;r.death=r.air=r.land=r.speed=r.moving=0;r.vx=p.vx;r.vz=p.vz;for(const l of r.legs){l.floor=p.y;l.nextSample=0;}}r.alive=alive;
@@ -82,15 +110,20 @@ export class SoldierBatch{
    const reload=b.arsenal.reloadProgress,attack=b.arsenal.attack,shot=b.shotUntil>time,knife=b.arsenal.selected===0;
    r.recoil=damp(r.recoil,shot?1:0,shot?40:16,dt);r.gun.rotation.set(-lean+b.pitch*1.25+r.recoil*.07,0,reload?-.35*Math.sin(reload*Math.PI):0);const chestY=r.pelvis.position.y+r.abdomen.position.y+.23*Math.cos(lean),gunDY=p.height*.78-chestY,gunDZ=-.32;
    r.gun.position.y=gunDY*Math.cos(lean)+gunDZ*Math.sin(lean)-(reload?.07:0)-clamp((b.arsenal.switchUntil-b.arsenal.time)/.24,0,1)*.20;r.gun.position.z=-gunDY*Math.sin(lean)+gunDZ*Math.cos(lean)+r.recoil*.035;
-   for(const arm of r.arms){const left=arm.side<0;let target=ikTarget.set(left?-.10:.02,-.045,left?-.09:.04).applyQuaternion(r.gun.quaternion).add(r.gun.position);if(reload&&left){target.set(-.04,-.25-Math.sin(reload*Math.PI)*.12,-.21);}if(knife){const t=attack?clamp((b.arsenal.time-attack.start)/attack.duration,0,1):0,w=Math.sin(t*Math.PI);target.set(arm.side*.25+(left?0:(attack?.combo===1?-1:1)*w*.28),-.15+(left?0:attack?.combo===2?w*.25:0),-.25-w*.18);}
+   for(const arm of r.arms){const left=arm.side<0;let target=ikTarget.set(left?-.10:.02,-.045,left?(b.arsenal.selected===3?.012:-.09):.04).applyQuaternion(r.gun.quaternion).add(r.gun.position);if(reload&&left){target.set(-.04,-.25-Math.sin(reload*Math.PI)*.12,-.21);}if(knife){const t=attack?clamp((b.arsenal.time-attack.start)/attack.duration,0,1):0,w=Math.sin(t*Math.PI);target.set(arm.side*.25+(left?0:(attack?.combo===1?-1:1)*w*.28),-.15+(left?0:attack?.combo===2?w*.25:0),-.25-w*.18);}
     if(b.held||b.throwAction||time-b.antidoteAt<.6){const t=b.throwAction?clamp((time-b.throwAction.start)/.68,0,1):0,wind=Math.sin(Math.min(1,t/.35)*Math.PI*.5),follow=t>.35?Math.sin((t-.35)/.65*Math.PI):0;const inject=time-b.antidoteAt<.6?Math.sin(clamp((time-b.antidoteAt)/.6,0,1)*Math.PI):0;target.set(left?-.28:.30-inject*.24,left?-.28:.03+wind*.17-follow*.12-inject*.13,left?-.12:-.15+wind*.14-follow*.29-inject*.08);}
     if(!fighting&&!reload&&!knife){target.y+=Math.sin(r.phase+(left?Math.PI:0))*.025;target.z+=s>9?.06:0;}this.armIK(arm,target);if(knife)arm.wrist.rotation.set(.1,0,left?-.1:.1);else arm.wrist.quaternion.copy(q.copy(arm.shoulder.quaternion).multiply(arm.elbow.quaternion).invert()).multiply(r.gun.quaternion);
    }
    if(knife){if(r.gun.parent!==r.arms[1].hand)r.arms[1].hand.add(r.gun);r.gun.position.set(0,-.06,0);r.gun.rotation.set(-1.3,0,0);}else if(r.gun.parent!==r.chest)r.chest.add(r.gun);
    if(b.atomicDown){r.root.rotation.z=0;r.root.rotation.x=-Math.PI*.48;r.root.position.y=y+.17;r.pelvis.position.y=.85;r.abdomen.rotation.x=0;r.chest.rotation.x=.03;r.head.rotation.x=.12;for(const l of r.legs){l.hip.rotation.x=.10;l.hip.rotation.z=l.side*.13;l.knee.rotation.x=-.25;l.ankle.rotation.x=.15;}for(const arm of r.arms){arm.shoulder.rotation.set(.45,0,arm.side*.48);arm.elbow.rotation.set(-.55,0,0);}}else r.root.rotation.x=0;
    r.root.updateMatrixWorld(true);
+   const variant=this.ranged[b.arsenal.selected-3];
+   if(variant&&!b.atomicDown&&(b.alive||time-b.deathTime<=2.7)&&!b.held&&!b.throwAction&&time-b.antidoteAt>=.6){
+    variant.setMatrixAt(variant.count++,r.gun.matrixWorld);
+   }
   }
+  for(const mesh of this.ranged){mesh.visible=mesh.count>0;if(mesh.visible)mesh.instanceMatrix.needsUpdate=true;}
   for(const batch of this.batches){batch.mesh.count=showPlayer?batch.parts.length:batch.botCount;for(let i=0;i<batch.mesh.count;i++){const p=batch.parts[i];const b=p.bot,hidden=(!b.atomicDown&&!b.alive&&time-b.deathTime>2.7)||(p.weapon!==null&&(b.atomicDown||p.weapon!==b.arsenal.selected||b.held||b.throwAction||time-b.antidoteAt<.6));if(hidden)matrix.makeScale(0,0,0);else matrix.copy(p.bone.matrixWorld);batch.mesh.setMatrixAt(p.index,matrix);const flash=b.hit>0?2:time<b.spawnUntil?1:0;if(p.flash!==flash){p.flash=flash;color.setHex(p.color);if(flash)color.lerp(flashColor,flash===2?.65:.28);batch.mesh.setColorAt(p.index,color);batch.mesh.instanceColor.needsUpdate=true;}}batch.mesh.instanceMatrix.needsUpdate=true;}
  }
- dispose(){for(const b of this.batches){this.scene.remove(b.mesh);b.mesh.dispose();}this.boxGeometry.dispose();if(this.ownsAppearance){this.geometry.dispose();this.material.dispose();this.ledMaterial.dispose();this.visorAtlas.dispose();}}
+ dispose(){for(const mesh of this.ranged){mesh.removeFromParent();mesh.geometry.dispose();mesh.dispose();}this.rangedMaterial?.dispose();for(const b of this.batches){this.scene.remove(b.mesh);b.mesh.dispose();}this.boxGeometry.dispose();if(this.ownsAppearance){this.geometry.dispose();this.material.dispose();this.ledMaterial.dispose();this.visorAtlas.dispose();}}
 }

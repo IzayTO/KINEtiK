@@ -1,3 +1,4 @@
+import {nextOpticMark} from './sniper-optic.js';
 import {SquadPresentation} from './squad-presentation.js';
 import {MatchEnding} from './match-verdict.js';
 import {OperationUI,medalIcon} from './operation-ui.js';
@@ -46,7 +47,7 @@ const audio=new AudioFX(params),preferences=loadPreferences(),arsenal=new Arsena
 const interfaceAudio=new InterfaceAudio(audio);
 // Explicit diagnostic mode does not pretend to render a game. Normal startup always requires WebGL.
 const diagnostic=new URLSearchParams(location.search).has('qa');
-let presentation,visorEditor,editor,minimap,reticle,refreshV2,assistCache=null,assistTime=0,match,aimSupport,combatUI,fieldHUD,gameUI,supportUI,operationUI;
+let presentation,visorEditor,charmEditor,editor,minimap,reticle,refreshV2,assistCache=null,assistTime=0,match,aimSupport,combatUI,fieldHUD,gameUI,supportUI,operationUI;
 let matchConfig={...MATCH_DEFAULTS};try{const saved=JSON.parse(localStorage.getItem('kinetic-match-v3'));if(saved)Object.assign(matchConfig,saved);}catch{}
 audio.preferences=preferences;arsenal.autoReload=preferences.autoReload;
 const events=[],metrics={physicsMS:0,renderMS:0,hudMS:0,minimapMS:0,physicsSteps:0};
@@ -54,7 +55,7 @@ const events=[],metrics={physicsMS:0,renderMS:0,hudMS:0,minimapMS:0,physicsSteps
 function toast(message){$('toast').textContent=message;$('toast').style.opacity='1';clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').style.opacity='0',2200);}
 function tab(name){for(const button of document.querySelectorAll('[data-tab]'))button.classList.toggle('active',button.dataset.tab===name);for(const id of ['settings','map','controls','reticle','match','audio','personalization'])$('tab-'+id).hidden=id!==name;if(name==='map')drawMap($('pause-map'),true);}
 function pause(settings=false){
-  if(presentation?.active||!$('match-result').hidden||visorEditor?.opened||match?.nuclear.impacted)return;
+  if(presentation?.active||!$('match-result').hidden||visorEditor?.opened||charmEditor?.opened||match?.nuclear.impacted)return;
   if(supportUI?.opened){supportUI.close();return;}
   if(editor?.editing){editor.close(false);return;}if(!started){openOptions();return;}playing=false;input.active=false;input.clear();clock.reset();audio.suspend();
   $('resume').hidden=false;$('pause').hidden=false;$('touch-controls').hidden=true;$('hud').hidden=true;
@@ -123,7 +124,7 @@ function refreshSettings(){
 function tick(now){
   frame=requestAnimationFrame(tick);const rawDt=Math.max(0,(now-lastTime)/1000||0),dt=Math.min(rawDt,0.1);lastTime=now;
   if(presentation?.active){presentation.frame(now);return;}
-  if(visorEditor?.opened||!$('match-result').hidden)return;
+  if(visorEditor?.opened||charmEditor?.opened||!$('match-result').hidden)return;
   let alpha=1;
   if(playing){
     const physicsStart=performance.now();let steps=0;
@@ -143,6 +144,7 @@ function tick(now){
         if(action==='atomic'){if(!match.nuclear.activate())toast('Requiere 41 bajas y usar RC, apoyo aéreo y R-12');sample.fire=sample.fireStart=false;}
         else if(action==='airstrike'){if(!supportUI.open())toast(match.support.flight?'Apoyo aéreo ya en curso':'Consigue 20 bajas para desbloquear apoyo aéreo');sample.fire=sample.fireStart=sample.aim=false;sample.x=sample.z=0;sample.fireRelease=null;if(supportUI.opened)break;}
         else if(action==='rc'){if(match.remote.deploy(input.yaw,input.pitch)){gameUI.prepareRemote();input.clear();input.remoteMode=true;input.pitch=match.remote.pitch;sample.pitch=input.pitch;sample.fire=sample.fireStart=false;sample.jump=false;}else toast(match.player.rcCharges?'Busca espacio en el suelo para desplegar el RC':'Consigue 10 bajas para desbloquear un RC');}
+        else if(action==='scope-zoom'){if(arsenal.selected===4&&sample.aim&&!match.player.held&&!arsenal.reload)view.scopeMark=nextOpticMark(view.scopeMark??1.5);}
         else if(action.startsWith('slot')){if(match.player.throwAction)continue;match.player.held=null;input.throwableMode=false;match.supplies.cancel(match.player);if(arsenal.select(+action.slice(4)))audio.sound('switch');}
         else if(action.startsWith('equip-')){if(match.ordnance.select(match.player,action.slice(6))){input.aimToggle=false;input.aim=false;input.throwableMode=match.player.held!=='rocket';input.throwArmed=false;input.releaseQueued=null;audio.sound('switch');}}
         else if(action==='antidote'){if(!match.ordnance.antidote(match.player))toast('Sin intoxicación o sin antídotos');}
@@ -159,15 +161,19 @@ function tick(now){
         if(!remote)combatUI.step(h,sample);
         aimOrigin.x=player.x;aimOrigin.y=player.y+view.eye;aimOrigin.z=player.z;
         const ray={x:-Math.sin(input.yaw)*Math.cos(input.pitch),y:Math.sin(input.pitch),z:-Math.cos(input.yaw)*Math.cos(input.pitch)};
-        const automatic=!remote&&!match.player.held&&!match.player.throwAction&&!manual&&!!aimSupport.autoTarget(aimOrigin,ray,sample.aim&&view.aim>.65);
-        if(automatic){sample.fire=true;if(arsenal.selected===1&&arsenal.mode==='semi'&&arsenal.time+h>=arsenal.slots[1].ready)sample.fireStart=true;}
+        // The optical reticle represents the camera ray, including its small pose offsets.
+        const throughScope=view.scoped&&arsenal.selected===4&&sample.aim;
+        const autoOrigin=throughScope?view.camera.position:aimOrigin;
+        const autoRay=throughScope?view.camera.getWorldDirection(view.dir):ray;
+        const automatic=!remote&&!match.player.held&&!match.player.throwAction&&!manual&&!!aimSupport.autoTarget(autoOrigin,autoRay,sample.aim&&view.aim>.65);
+        if(automatic){sample.fire=true;if((arsenal.selected===3||arsenal.selected===1&&arsenal.mode==='semi')&&arsenal.time+h>=arsenal.slots[arsenal.selected].ready)sample.fireStart=true;}
         const throwing=!!match.player.held||!!match.player.throwAction;
         if(!remote&&match.player.held==='rocket'&&sample.fireStart)match.ordnance.trigger(match.player,input.yaw,input.pitch);
         if(!remote&&throwing&&match.player.held!=='rocket'&&sample.fireRelease)match.ordnance.trigger(match.player,sample.fireRelease.yaw,sample.fireRelease.pitch);
         match.player.throwPrevious=sample.fire;input.throwableMode=!!match.player.held&&match.player.held!=='rocket';
         if(remote||supportUI.opened||throwing||match.player.consuming||match.player.opening){sample.fire=false;sample.fireStart=false;}
         arsenal.step(h,sample,{busy:remote||supportUI.opened||throwing||!!match.player.consuming||!!match.player.opening,speed:player.speed,grounded:player.grounded,aim:sample.aim&&arsenal.selected!==0},e=>{
-          if(automatic&&e.type==='shot'){const result=view.fire(e,aimOrigin,ray);shots++;registerHits(result);}else events.push(e);
+          if(automatic&&e.type==='shot'){const result=view.fire(e,autoOrigin,autoRay);shots++;registerHits(result);}else events.push(e);
         });
       }
       match.step(h);if(remote&&!match.remote.engaged){input.clear();input.yaw=match.remote.savedYaw;input.pitch=match.remote.savedPitch;input.remoteMode=false;}
@@ -177,6 +183,11 @@ function tick(now){
     });
     metrics.physicsMS=performance.now()-physicsStart;metrics.physicsSteps=steps;
     audio.setListener(match.remote.engaged?match.remote.body:player,input.yaw);audio.motor(match.remote.ready,match.remote.body.speed,match.remote.command.sprint);audio.aircraft(match.support.flight);const sampled=match.staging?{yaw:input.yaw,pitch:input.pitch,x:0,z:0,aim:false,fire:false}:input.sample(false);match.nuclear.filterInput(sampled);view.update(dt,player,sampled,alpha,arsenal);
+    const scoped=view.scoped&&!supportUI.opened&&!editor.editing;
+    $('optic-mask').hidden=$('optic-step').hidden=!scoped;
+    $('hud').classList.toggle('scoped',scoped);
+    if(scoped)$('optic-step').textContent=(view.scopeMark??1.5)+'×';
+    input.opticSensitivity=scoped?1/view.camera.zoom:1;
     for(const event of events){
       if(event.type==='ping'){if(view.placePing()){const enemy=match.lineTarget(match.player,view.camera.position,view.dir,150).actor,p=enemy&&match.enemy(match.player,enemy)?{x:enemy.body.x,y:enemy.body.y+enemy.body.height+.15,z:enemy.body.z}:view.pingPosition;match.support.playerPing(p,performance.now()/1000);view.pingMesh.visible=false;}else toast('No hay una superficie válida en esa dirección');continue;}
       if(event.type==='empty'){toast('Sin munición · Recarga');continue;}
@@ -209,12 +220,12 @@ function tick(now){
     const zone=level.zones.find(z=>Math.abs(player.x-z.x)<z.w/2&&Math.abs(player.z-z.z)<z.d/2);$('zone').textContent=zone?.name||'ENLACE EXTERIOR';
     minimap.update(now/1000,player,input.yaw,null,preferences.mapRotate);metrics.minimapMS=minimap.ms;document.querySelector('#minimap>span').textContent=preferences.mapRotate?'RUMBO / 09':'N ↑ / 09';
     $('ammo').textContent=arsenal.selected===0?'—':arsenal.ammo;$('weapon-name').textContent=arsenal.weapon.name;
-    $('fire-mode').textContent=arsenal.selected===1?arsenal.mode.toUpperCase():arsenal.selected===2?(arsenal.shotgunMode==='pump'?'CORREDERA':'TÁCTICO'):'CUCHILLO';
+    $('fire-mode').textContent=arsenal.selected===1?arsenal.mode.toUpperCase():arsenal.selected===2?(arsenal.shotgunMode==='pump'?'CORREDERA':'TÁCTICO'):arsenal.selected===3?'SEMIAUTO':arsenal.selected===4?'CERROJO':'CUCHILLO';
     $('ammo-status').textContent=arsenal.reload?'RECARGANDO':arsenal.selected===0?'AGARRE INVERTIDO':'/ '+arsenal.weapon.capacity+' · RESERVA '+arsenal.reserve;
     $('reload-progress').style.width=(arsenal.reloadProgress*100)+'%';
     document.querySelectorAll('#weapon-slots button').forEach(b=>b.classList.toggle('selected',!match.player.held&&+b.dataset.action.slice(4)===arsenal.selected));
     document.querySelector('.assist-button').classList.toggle('selected',preferences.assist);
-    document.querySelector('.mode-button').classList.toggle('selected',arsenal.selected===1&&arsenal.mode==='semi');document.querySelector('.mode-button small').textContent=arsenal.selected===1?arsenal.mode.toUpperCase():arsenal.selected===2?(arsenal.shotgunMode==='pump'?'BOMBA':'TÁCTICO'):'FILO';
+    document.querySelector('.mode-button').classList.toggle('selected',arsenal.selected===1&&arsenal.mode==='semi');document.querySelector('.mode-button small').textContent=arsenal.selected===1?arsenal.mode.toUpperCase():arsenal.selected===2?(arsenal.shotgunMode==='pump'?'BOMBA':'TÁCTICO'):arsenal.selected===3?'SEMI':arsenal.selected===4?'CERROJO':'FILO';
     updateMatchHUD();fieldHUD.refresh();
     metrics.hudMS=performance.now()-hudStart;
     $('render-stats').textContent=`120 Hz · ${view.stats.calls} llamadas · ${Math.round(view.stats.triangles/1000)}k triángulos · ${Math.round(view.scale*100)}% píxel CSS · CPU física ${metrics.physicsMS.toFixed(2)} ms · envío render ${metrics.renderMS.toFixed(2)} ms · HUD ${metrics.hudMS.toFixed(2)} ms${diagnostic?' · QA SIN 3D':''}`;
@@ -287,6 +298,12 @@ function setupMatchUI(){
   catch(error){toast('No se pudo abrir el editor de visor.');console.error(error);}
   finally{button.disabled=false;}
  };
+ $('open-charms').onclick=async()=>{
+  const button=$('open-charms');button.disabled=true;
+  try{if(!charmEditor){const {CharmEditor}=await import('./charm-editor.js');charmEditor=new CharmEditor(()=>view);}charmEditor.open();}
+  catch(error){toast('No se pudo abrir el editor de llaveros.');console.error(error);}
+  finally{button.disabled=false;}
+ };
  $('home-options').onclick=openOptions;$('options-home').onclick=home;
  const read=()=>{for(const key of fields){const val=$('match-'+key).value;matchConfig[key]=typeof MATCH_DEFAULTS[key]==='number'?+val:val;}try{localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));}catch{}return matchConfig;};
  $('map-select').value=matchConfig.map;const mapChoice=e=>{matchConfig.map=e.target.value;$('match-map').value=$('map-select').value=matchConfig.map;try{localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));}catch{}};$('map-select').onchange=$('match-map').onchange=mapChoice;$('map-play').onclick=()=>{beginSimulation(read());start();};
@@ -298,7 +315,7 @@ try{
   level=makeLevel(matchConfig.map);player=new Player(new CollisionWorld(level.solids),params,level.spawn);clock=new FixedClock();
   match=new Match(player.world,player,arsenal,params,level);view=new V3World(canvas,level,params,{render:!diagnostic});input=new Input(canvas,params,pause,reset);
   view.preferences=preferences;aimSupport=new AimSupport(match,preferences);input.onLook=(dx,dy)=>aimSupport.manual(dx,dy);
-  input.preferences=preferences;input.onAssist=(yaw,pitch,dyaw,dpitch)=>match.nuclear.restricted?[dyaw,dpitch]:assistDelta(yaw,pitch,dyaw,dpitch,view.confirmAssist(assistCache),preferences);
+  input.preferences=preferences;input.onAssist=(yaw,pitch,dyaw,dpitch)=>match.nuclear.restricted||view.scoped?[dyaw,dpitch]:assistDelta(yaw,pitch,dyaw,dpitch,view.confirmAssist(assistCache),preferences);
   editor=new HUDEditor({touch:input.touchMode,onClose:({save,persisted})=>{gameUI.releaseCapture();input.clear();clock.reset();$('pause').hidden=false;$('touch-controls').hidden=true;$('hud').hidden=true;tab('controls');if(save)toast(persisted?'Distribución guardada':'Aplicada en esta sesión; almacenamiento no disponible');}});
   combatUI=new CombatUI(match,view,input,preferences,()=>playing&&!editor.editing&&!match.staging&&!match.nuclear.restricted&&match.player.alive&&!match.remote.engaged&&!supportUI?.opened,toast);
   fieldHUD=new FieldHUD(match,view,input);gameUI=new GameInterface(view,match,input);operationUI=new OperationUI(match,input);

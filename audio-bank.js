@@ -1,6 +1,6 @@
 // Original mono sample synthesis, once per AudioContext. No downloads or convolution.
 // Short impulses, resonant body, mechanical transients and a restrained diffuse tail.
-export const BANK_SECONDS={'atomic-impact':2,'atomic-roar':8.4,'atomic-pulse':.48,medal:.32,chain:.20,rifle:.32,shotgun:.52,explosion:1.15,'airstrike-impact':1.9,step:.16,sprint:.18,land:.28,jump:.20,pump:.26,reload:.40,shell:.18,loaded:.22,switch:.15,casing:.28,glass:.52,gas:.72,throw:.24,'fire-loop':.62,antidote:.27};
+export const BANK_SECONDS={'atomic-impact':2,'atomic-roar':8.4,'atomic-pulse':.48,medal:.32,chain:.20,rifle:.32,shotgun:.52,pistol:.21,sniper:.69,explosion:1.15,'airstrike-impact':1.9,step:.16,sprint:.18,land:.28,jump:.20,pump:.26,reload:.40,shell:.18,loaded:.22,switch:.15,casing:.28,glass:.52,gas:.72,throw:.24,'fire-loop':.62,antidote:.27};
 export function createAudioBank(ctx){const bank={};for(const [kind,duration]of Object.entries(BANK_SECONDS)){const buffer=ctx.createBuffer(1,Math.ceil(ctx.sampleRate*duration),ctx.sampleRate),data=buffer.getChannelData(0);let low=0,rumble=0,previous=0,crackle=0,seed=kind.split('').reduce((s,c)=>s+c.charCodeAt(0),197),peak=0;
  const rnd=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/2147483648-1;};
  for(let i=0;i<data.length;i++){const t=i/ctx.sampleRate,n=rnd();low+=.14*(n-low);rumble+=.016*(n-rumble);const high=n-previous;previous=n;let v=0;
@@ -8,6 +8,8 @@ export function createAudioBank(ctx){const bank={};for(const [kind,duration]of O
   else if(kind==='atomic-roar'){const rise=Math.min(1,t/.45),tail=Math.min(1,(duration-t)/2.1),swell=.72+.16*Math.sin(t*2.1)+.12*Math.sin(t*5.7);crackle*=Math.exp(-1/(ctx.sampleRate*.014));if(n>.9987)crackle=.4+rnd()*.2;const bass=Math.sin(2*Math.PI*(47*t+.35*Math.sin(t*.7)))*.13+Math.sin(2*Math.PI*71*t)*.055;v=(rumble*4.1+low*.65+bass+high*crackle*.48)*rise*tail*swell;}
   else if(kind==='atomic-pulse'){v=Math.sin(2*Math.PI*(92*t-42*t*t))*Math.exp(-t/.13)*.7+rumble*Math.exp(-t/.16)*1.8;}
   else if(kind==='medal'||kind==='chain'){v=Math.sin(t*2*Math.PI*(kind==='medal'?740:580))*Math.exp(-t/.075)*.40;if(t>.07)v+=Math.sin((t-.07)*2*Math.PI*(kind==='medal'?1110:870))*Math.exp(-(t-.07)/.09)*.3;}
+  else if(kind==='pistol'){v=high*.43*Math.exp(-t/.006)+Math.sin(2*Math.PI*185*t)*.30*Math.exp(-t/.029)+low*.95*Math.exp(-t/.054);}
+  else if(kind==='sniper'){v=n*.83*Math.exp(-t/.013)+Math.sin(2*Math.PI*(71*t-12*t*t))*.49*Math.exp(-t/.10)+rumble*2.1*Math.exp(-t/.23);if(t>.09)v+=low*.44*Math.exp(-(t-.09)/.14);if(t>.19)v+=high*.13*Math.exp(-(t-.19)/.02);if(t>.52)v+=n*.16*Math.exp(-(t-.52)/.012);}
   else if(kind==='rifle'||kind==='shotgun'||kind==='explosion'||kind==='airstrike-impact'){const heavy=kind!=='rifle',boom=kind==='explosion'||kind==='airstrike-impact',body=kind==='airstrike-impact'?32:boom?42:heavy?73:127;
    v=n*Math.exp(-t/(boom?.045:heavy?.016:.008))*.65+Math.sin(2*Math.PI*body*t*(1-.24*t))*Math.exp(-t/(boom?.21:heavy?.075:.042))*.38+low*Math.exp(-t/(boom?.38:heavy?.16:.085))*(boom?3.5:heavy?1.8:1.1)+rumble*Math.exp(-t/(boom?.55:.15))*.8;
    // Two very quiet early reflections add body without a long, busy reverb.

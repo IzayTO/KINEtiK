@@ -41,15 +41,34 @@ export class V2World extends WorldView{
    // Solve optical alignment from physical sight anchors. ADS removes all lateral/rotational sway.
    this.rig.position.lerp(m.ads.position,this.aim);this.rig.quaternion.slerp(m.ads.rotation,this.aim);this.rig.position.z+=this.recoil*.025*this.aim;
   }
-  const switchDrop=a?clamp((a.switchUntil-a.time)/.24,0,1):0;this.rig.position.y-=Math.sin(switchDrop*Math.PI/2)*.22;
+  const switchDrop=a?clamp((a.switchUntil-a.time)/(a.weapon.draw??.24),0,1):0;this.rig.position.y-=Math.sin(switchDrop*Math.PI/2)*.22;
   // Clear per-weapon hand offsets before layering the current action.
-  this.arms[1].position.y=0;this.arms[1].rotation.x=0;
+  this.arms[1].position.y=0;this.arms[1].rotation.x=0;this.arms[1].position.x=0;
   if(selected===1){const q=a?.reload?a.reloadProgress:0;
    if(a?.reload){this.rig.position.y+=this.poseSprint*.055;this.rig.rotation.x+=this.poseSprint*.17;this.rig.rotation.y-=this.poseSprint*.28;this.rig.rotation.z-=this.poseSprint*.29;}
    m.mag.position.y=-.13-Math.sin(q*Math.PI)*.22;m.mag.rotation.z=-Math.sin(q*Math.PI)*.13;if(q){this.rig.rotation.z-=Math.sin(q*Math.PI)*.26;this.arms[1].position.y=-Math.sin(q*Math.PI)*.15;}else this.arms[1].position.y=0;}
   if(selected===2){const elapsed=a?a.time-a.lastShot:100,duration=a?.shotgunMode==='tactical'?.27:.51,start=a?.shotgunMode==='tactical'?.10:.15,pump=elapsed>start&&elapsed<start+duration?Math.sin((elapsed-start)/duration*Math.PI):0;m.pump.position.z=-.47+pump*.13;this.arms[1].position.z=pump*.13;
    const q=a?.reload?a.reloadProgress:0;m.shell.visible=!!a?.reload;m.shell.position.y=-.21+q*.12;this.arms[1].rotation.x=-Math.sin(q*Math.PI)*.3;this.rig.rotation.z-=Math.sin(q*Math.PI)*.13;
   }else this.arms[1].position.z=0;
+  if(selected===3||selected===4){
+   const pistol=selected===3, elapsed=a&&a.lastUsed===m.kind?a.time-a.lastShot:2;
+   const q=a?.reload?a.reloadProgress:0, reach=Math.sin(Math.PI*q);
+   m.mag.position.y=(pistol?-.177:-.103)-reach*(pistol?.15:.23);
+   m.mag.rotation.z=-reach*.13;this.rig.rotation.z+=reach*(pistol?.28:-.21);
+   this.arms[1].position.y=-reach*.14;
+   if(pistol){
+    this.rig.position.y+=.065*(1-this.aim);this.rig.position.z-=.065*(1-this.aim);
+    m.slide.position.z=.053*Math.max(0,1-elapsed/.12);
+    this.arms[1].position.x=.047;this.arms[1].position.z=.37-reach*.05;
+    this.rig.rotation.x+=Math.max(0,1-elapsed/.13)*.06;
+   }else{
+    const cycle=clamp((elapsed-.16)/.55,0,1);
+    m.bolt.position.z=.009+Math.sin(cycle*Math.PI)**2*.091;
+    m.bolt.rotation.z=Math.sin(cycle*Math.PI)*.85;
+    this.arms[0].position.z=m.bolt.position.z-.009;
+   }
+  }
+  if(selected!==4)this.arms[0].position.z=0;
   if(selected===0){const attack=a?.attack,t=attack?clamp((a.time-attack.start)/attack.duration,0,1):0,pose=attack?knifePose(attack.combo,t):[0,0,0];
    this.rig.position.set(.16+Math.sin(this.phase*1.1)*.018*this.bob*this.params.cameraMotion,-.157+Math.cos(this.phase*2)*.014*this.bob*this.params.cameraMotion-this.poseSlide*.045+this.landing*.3-this.jumpKick*.02,-.775+this.recoil*.015);this.rig.rotation.set(.10*this.poseSlide+clamp(p.vy,-10,10)*.003*this.params.cameraMotion,.08*this.poseSprint,.11*this.poseSprint);
    m.wrist.position.set(pose[0],pose[1],pose[2]);m.wrist.rotation.set(attack?Math.sin(t*Math.PI)*.8:0,attack?(attack.combo===1?-1:1)*Math.sin(t*Math.PI)*1.0:0,-.035+pose[0]*1.8);

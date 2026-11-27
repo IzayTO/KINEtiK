@@ -17,7 +17,7 @@ export class Input {
       if(e.code==='KeyP'||e.code==='Tab'){e.preventDefault();onPause(true);return;}
       if(!this.active)return;
       if(e.code==='Home'&&!e.repeat)onReset();
-      const action={KeyK:'atomic',KeyJ:'airstrike',KeyX:'rc',KeyU:'equip-rocket',KeyG:'equip-grenade',KeyT:'equip-molotov',KeyN:'equip-gas',KeyV:'antidote',KeyR:'reload',KeyQ:'ping',KeyB:'mode',KeyH:'assist',KeyF:'autofire',Digit4:'bandage',Digit5:'mini',Digit1:'slot0',Digit2:'slot1',Digit3:'slot2'}[e.code];if(action&&!e.repeat)this.actions.push(action);
+      const action={KeyK:'atomic',KeyJ:'airstrike',KeyX:'rc',KeyU:'equip-rocket',KeyG:'equip-grenade',KeyT:'equip-molotov',KeyN:'equip-gas',KeyV:'antidote',KeyR:'reload',KeyQ:'ping',KeyB:'mode',KeyH:'assist',KeyF:'autofire',Digit4:'bandage',Digit5:'mini',Digit1:'slot0',Digit2:'slot1',Digit3:'slot2',Digit6:'slot3',Digit7:'slot4',KeyZ:'scope-zoom'}[e.code];if(action&&!e.repeat)this.actions.push(action);
       if(e.code==='Space'&&!e.repeat)this.jumpQueued=true;
       if(['KeyC','ControlLeft','ControlRight'].includes(e.code)&&!e.repeat)this.slideQueued=true;
       this.keys.add(e.code);
@@ -49,7 +49,7 @@ export class Input {
       button.addEventListener('pointerdown',e=>{
         if(!this.active)return;e.preventDefault();e.stopPropagation();capture(button,e.pointerId);this.buttons.set(e.pointerId,action);
         button.classList.add('pressed');
-        if(action.startsWith('equip-')||['atomic','airstrike','rc','antidote','reload','ping','assist','mode','autofire','bandage','mini','slot0','slot1','slot2'].includes(action))this.actions.push(action);
+        if(action.startsWith('equip-')||['atomic','airstrike','rc','antidote','reload','ping','assist','mode','autofire','bandage','mini','slot0','slot1','slot2','slot3','slot4','scope-zoom'].includes(action))this.actions.push(action);
         if(action==='jump'){this.jumpQueued=true;this.crouchToggle=false;}
         if(action==='slide'){this.slideQueued=!!this.airborne||this.params.contextualSlide&&(this.speed||0)>=5.4;if(!this.airborne&&(!this.params.contextualSlide || (this.speed||0)<5.4))this.crouchToggle=!this.crouchToggle;else this.crouchToggle=false;}
         if(action==='sprint'){this.sprintToggle=!this.sprintToggle;this.crouchToggle=false;button.classList.toggle('selected',this.sprintToggle);}
@@ -74,7 +74,7 @@ export class Input {
   look(dx,dy,touch){
     if(!this.active)return;
     const p=this.preferences,source=touch?'touch':'mouse',ads=this.aiming?(p?.[source+'ADS']??0.7):1;
-    const scale=(touch?0.0030:0.0018)*this.params.sensitivity*ads;
+    const scale=(touch?0.0030:0.0018)*this.params.sensitivity*ads*(this.opticSensitivity??1);
     let dyaw=-dx*scale*(p?.[source+'X']??1),dpitch=-dy*scale*(p?.[source+'Y']??1)*(p?.invertY?-1:1);
     this.onLook?.(dyaw,dpitch);
     if(!this.remoteMode&&!this.throwableMode&&this.onAssist&&p?.assist&&(touch||p.assistMouse))[dyaw,dpitch]=this.onAssist(this.yaw,this.pitch,dyaw,dpitch);
@@ -105,7 +105,7 @@ export class Input {
   }
   clear(){
     this.actions.length=0;this.fireQueued=false;this.releaseQueued=null;this.throwArmed=false;this.fireOrigins?.clear();
-    this.keys.clear();this.fire=false;this.aim=false;this.aimToggle=false;this.sprintToggle=false;this.crouchToggle=false;
+    this.opticSensitivity=1;this.keys.clear();this.fire=false;this.aim=false;this.aimToggle=false;this.sprintToggle=false;this.crouchToggle=false;
     this.touchMove={x:0,z:0};this.joystickId=null;this.lookId=null;this.firePointers.clear();this.buttons.clear();
     this.jumpQueued=false;this.slideQueued=false;this.lookDX=0;this.lookDY=0;
     if(this.knob)this.knob.style.transform='translate(-50%, -50%)';

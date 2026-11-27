@@ -1,15 +1,15 @@
 import {COLS, ROWS, colorCode} from './visor-designs.js';
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-export function strokeLine(pixels, from, to, color, mirror) {
+export function strokeLine(pixels, from, to, color, mirror, cols=COLS) {
   // Connect reported touch samples even when the browser coalesces fast movements.
   let {x, y} = from;
   const dx = Math.abs(to.x-x), dy = Math.abs(to.y-y);
   const sx = x < to.x ? 1 : -1, sy = y < to.y ? 1 : -1;
   let error = dx-dy;
   for (;;) {
-    pixels[y*COLS+x] = color;
-    if (mirror) pixels[y*COLS+COLS-1-x] = color;
+    pixels[y*cols+x] = color;
+    if (mirror) pixels[y*cols+cols-1-x] = color;
     if (x === to.x && y === to.y) break;
     const twice = 2*error;
     if (twice > -dy) { error -= dy; x += sx; }
@@ -18,37 +18,37 @@ export function strokeLine(pixels, from, to, color, mirror) {
 }
 
 export class BoardViewport {
-  constructor() { this.zoom = 1; this.x = this.y = 0; this.resize(1,1); }
+  constructor(cols=COLS,rows=ROWS) { this.cols=cols; this.rows=rows; this.zoom = 1; this.x = this.y = 0; this.resize(1,1); }
   resize(w,h) {
     this.w = Math.max(1,w); this.h = Math.max(1,h);
-    this.base = Math.max(.01, Math.min((w-12)/COLS,(h-12)/ROWS));
+    this.base = Math.max(.01, Math.min((w-12)/this.cols,(h-12)/this.rows));
     this.limit();
   }
   get cell() { return this.base*this.zoom; }
-  get left() { return (this.w-COLS*this.cell)/2 + this.x; }
-  get top() { return (this.h-ROWS*this.cell)/2 + this.y; }
+  get left() { return (this.w-this.cols*this.cell)/2 + this.x; }
+  get top() { return (this.h-this.rows*this.cell)/2 + this.y; }
   limit() {
-    const ex = Math.max(0,(COLS*this.cell-this.w+12)/2);
-    const ey = Math.max(0,(ROWS*this.cell-this.h+12)/2);
+    const ex = Math.max(0,(this.cols*this.cell-this.w+12)/2);
+    const ey = Math.max(0,(this.rows*this.cell-this.h+12)/2);
     this.x = clamp(this.x,-ex,ex); this.y = clamp(this.y,-ey,ey);
   }
   frame(zoom, previous, next) {
     const gx = (previous.x-this.left)/this.cell, gy = (previous.y-this.top)/this.cell;
     this.zoom = clamp(zoom,1,6);
-    this.x = next.x-this.w/2+(COLS/2-gx)*this.cell;
-    this.y = next.y-this.h/2+(ROWS/2-gy)*this.cell;
+    this.x = next.x-this.w/2+(this.cols/2-gx)*this.cell;
+    this.y = next.y-this.h/2+(this.rows/2-gy)*this.cell;
     this.limit();
   }
   hit(p) {
     const x = Math.floor((p.x-this.left)/this.cell), y = Math.floor((p.y-this.top)/this.cell);
-    return x>=0 && x<COLS && y>=0 && y<ROWS ? {x,y} : null;
+    return x>=0 && x<this.cols && y>=0 && y<this.rows ? {x,y} : null;
   }
 }
 
 export class VisorBoard {
-  constructor(canvas, editor) {
+  constructor(canvas, editor, cols=COLS, rows=ROWS) {
     this.canvas = canvas; this.ctx = canvas.getContext('2d'); this.editor = editor;
-    this.view = new BoardViewport(); this.touches = new Map(); this.mode = 'idle';
+    this.view = new BoardViewport(cols,rows); this.touches = new Map(); this.mode = 'idle';
     canvas.onpointerdown = e => this.down(e);
     canvas.onpointermove = e => this.move(e);
     canvas.onpointerup = e => this.end(e);
@@ -71,7 +71,7 @@ export class VisorBoard {
     return {x:(a.x+b.x)/2, y:(a.y+b.y)/2, d:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y))};
   }
   cancel() {
-    if (this.mode==='paint' && this.before) this.editor.pixels.set(this.before);
+    if ((this.mode==='paint'||this.mode==='fill') && this.before) this.editor.pixels.set(this.before);
     const ids = Array.from(this.touches.keys());
     this.mode = 'idle'; this.strokePoint = this.before = null; this.touches.clear();
     for (const id of ids) if (this.canvas.hasPointerCapture(id)) this.canvas.releasePointerCapture(id);
@@ -82,18 +82,21 @@ export class VisorBoard {
     const p = this.point(e);
     this.canvas.setPointerCapture(e.pointerId); this.touches.set(e.pointerId,p);
     if (this.touches.size===2) {
-      if (this.mode==='paint') this.editor.pixels.set(this.before);
+      if (this.mode==='paint'||this.mode==='fill') this.editor.pixels.set(this.before);
       this.before=null; this.baseTouch=this.pair(); this.mode='pinch'; this.editor.redraw(); return;
     }
     if (this.editor.tool==='pan') { this.mode='pan'; return; }
     const cell=this.view.hit(p);
     if (!cell) { this.mode='wait'; return; }
     this.mode='paint'; this.before=this.editor.pixels.slice(); this.strokePoint=cell; this.firstCell=cell;
+    if(this.editor.tool==='bucket'){
+      this.mode='fill';this.editor.flood(cell);this.editor.redraw();return;
+    }
     this.moved=false;
     this.ink=this.editor.tool==='erase'?0:this.editor.color;
     // A stationary tap toggles a matching LED. A stroke paints continuously.
-    const current=this.before[cell.y*COLS+cell.x];
-    strokeLine(this.editor.pixels,cell,cell,current===this.ink?0:this.ink,this.editor.mirror);
+    const current=this.before[cell.y*this.view.cols+cell.x];
+    strokeLine(this.editor.pixels,cell,cell,current===this.ink?0:this.ink,this.editor.mirror,this.view.cols);
     this.editor.redraw();
   }
   move(e) {
@@ -111,15 +114,15 @@ export class VisorBoard {
       const cell=this.view.hit(next);
       if (!cell) { this.strokePoint=null; return; }
       if (!this.moved && cell.x===this.firstCell.x && cell.y===this.firstCell.y) return;
-      if (!this.moved) strokeLine(this.editor.pixels,this.firstCell,this.firstCell,this.ink,this.editor.mirror);
-      this.moved=true; strokeLine(this.editor.pixels,this.strokePoint||cell,cell,this.ink,this.editor.mirror);
+      if (!this.moved) strokeLine(this.editor.pixels,this.firstCell,this.firstCell,this.ink,this.editor.mirror,this.view.cols);
+      this.moved=true; strokeLine(this.editor.pixels,this.strokePoint||cell,cell,this.ink,this.editor.mirror,this.view.cols);
       this.strokePoint=cell;
     } else return;
     this.editor.redraw();
   }
   end(e,canceled=false) {
     if (!this.touches.has(e.pointerId)) return;
-    if (this.mode==='paint') {
+    if (this.mode==='paint'||this.mode==='fill') {
       if (canceled) this.editor.pixels.set(this.before);
       else { this.move(e); this.editor.commit(this.before); }
     }
@@ -145,8 +148,8 @@ export class VisorBoard {
     ctx.setTransform(c.width/w,0,0,c.height/h,0,0);
     ctx.clearRect(0,0,w,h);
     const size=v.cell, gap=Math.max(.65,Math.min(2.4,size*.085));
-    for (let y=0;y<ROWS;y++) for (let x=0;x<COLS;x++) {
-      const value=pixels[y*COLS+x];
+    for (let y=0;y<v.rows;y++) for (let x=0;x<v.cols;x++) {
+      const value=pixels[y*v.cols+x];
       const left=v.left+x*size+gap/2, top=v.top+y*size+gap/2;
       const edge=Math.max(.2,size-gap);
       if (left>w || top>h || left+edge<0 || top+edge<0) continue;

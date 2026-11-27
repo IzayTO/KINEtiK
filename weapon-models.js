@@ -100,10 +100,54 @@ export function buildModels(){
  const sf=flash(shotgun,-.98),ss=sight(shotgun,.025,-.82,false);
  batch(shotgun,[pump,shell,sf]);
 
+ // P-12 compact frame. The slide and the magazine have independent resting pivots.
+ const pistol=new T.Group(), slide=new T.Group(), pistolMag=new T.Group();
+ pistol.add(slide,pistolMag);
+ panel(pistol,[[-.222,.060,.065,-.016],[-.185,.085,.078,-.017],[.07,.086,.074,-.018]]);
+ box(pistol,.077,.176,.102,0,-.109,.036,'rubber').rotation.x=-.18;
+ box(pistol,.019,.016,.105,0,-.08,-.058,'steel');
+ box(pistol,.021,.060,.018,0,-.057,-.102,'steel');
+ panel(slide,[[-.248,.064,.066,.041],[-.221,.086,.075,.046],[.075,.088,.080,.047],[.093,.068,.068,.045]],'steel');
+ for(const x of [-.043,.043]){
+  for(let i=0;i<3;i++)box(slide,.004,.039,.009,x,.044,.017+i*.019,'dark');
+  box(pistol,.005,.018,.052,x,-.024,-.129,'accent');
+ }
+ tube(pistol,.023,.05,0,.043,-.242,'dark');
+ for(const x of [-.025,.025])box(slide,.012,.026,.022,x,.098,.050);
+ box(slide,.009,.027,.019,0,.100,-.195,'accent');
+ pistolMag.position.set(0,-.177,.042);
+ box(pistolMag,.073,.080,.074,0,0,0,'steel');box(pistolMag,.085,.018,.088,0,-.043,0,'rubber');
+ const ps=sight(pistol,.05,-.195,false),pf=flash(pistol,-.31);
+ ps.rear.position.y=ps.front.position.y=.113;
+ batch(slide);batch(pistolMag);batch(pistol,[slide,pistolMag,pf]);
+
+ // L-04 long, narrow silhouette, two scope mounts and a separately animated bolt.
+ const sniper=new T.Group(),bolt=new T.Group(),sniperMag=new T.Group();
+ sniper.add(bolt,sniperMag);
+ panel(sniper,[[-.60,.068,.078,.014],[-.51,.103,.098,.012],[-.21,.126,.113,.002],[.10,.118,.115,-.008]],'edge');
+ panel(sniper,[[.07,.075,.071,-.004],[.20,.091,.061,.018],[.35,.105,.116,-.009]],'dark');
+ box(sniper,.115,.151,.035,0,-.021,.358,'rubber');
+ box(sniper,.073,.141,.067,0,-.103,.043,'dark').rotation.x=-.26;
+ tube(sniper,.024,.53,0,.028,-.815);tube(sniper,.039,.11,0,.028,-1.119,'dark');
+ tube(sniper,.025,.008,0,.028,-1.176,'rubber');
+ for(const z of [-.252,-.032])box(sniper,.054,.063,.054,0,.087,z,'dark');
+ tube(sniper,.038,.32,0,.141,-.145,'rubber');
+ tube(sniper,.059,.095,0,.141,-.334,'dark');tube(sniper,.051,.085,0,.141,.050,'dark');
+ tube(sniper,.043,.006,0,.141,.094,'accent');tube(sniper,.052,.006,0,.141,-.384,'accent');
+ for(const x of [-.054,.054])box(sniper,.008,.017,.182,x,.007,-.386,'dark');
+ bolt.position.set(.052,.038,.009);
+ box(bolt,.085,.018,.018,.031,0,0,'steel');box(bolt,.029,.049,.028,.072,-.015,.002,'rubber');
+ sniperMag.position.set(0,-.103,-.143);
+ box(sniperMag,.071,.113,.116,0,0,0,'dark');box(sniperMag,.080,.018,.122,0,-.059,0,'steel');
+ const ns=sight(sniper,.092,-.383,false),nf=flash(sniper,-1.218);
+ batch(bolt);batch(sniperMag);batch(sniper,[bolt,sniperMag,nf]);
+
  return [
   buildTalon(),
   {root:rifle,mag,kind:'rifle',...rs,flash:rf,muzzle:rf},
-  {root:shotgun,pump,shell,kind:'shotgun',...ss,flash:sf,muzzle:sf}
+  {root:shotgun,pump,shell,kind:'shotgun',...ss,flash:sf,muzzle:sf},
+  {root:pistol,slide,mag:pistolMag,kind:'pistol',...ps,flash:pf,muzzle:pf},
+  {root:sniper,bolt,mag:sniperMag,kind:'sniper',...ns,flash:nf,muzzle:nf}
  ];
 }
 export function aimTransform(model){
