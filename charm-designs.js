@@ -1,6 +1,8 @@
 import {BOTS,sameDesign} from './visor-designs.js';
 
 export const COLS=24, ROWS=10, CELLS=COLS*ROWS;
+// 0 is an opaque unlit LED. RGB colours occupy 1 through 0x1000000.
+export const CUTOUT=0x1000001;
 export const CHARMS=Object.freeze({
  knife:'FILO',rifle:'K-09 · Rifle',shotgun:'S-07 · Escopeta',pistol:'P-12 · Pistola',
  sniper:'L-04 · Francotirador',grenade:'Granada',molotov:'Molotov',gas:'N-09 · Gas',
@@ -19,7 +21,7 @@ function designKey(actor,weapon){
 }
 function validatePixels(pixels){
  if(!(Array.isArray(pixels)||pixels instanceof Uint32Array)||pixels.length!==CELLS)throw Error('Cada diseño debe contener 240 LED.');
- for(const value of pixels)if(!Number.isInteger(value)||value<0||value>0x1000000)throw Error('El diseño contiene un color LED inválido.');
+ for(const value of pixels)if(!Number.isInteger(value)||value<0||value>CUTOUT)throw Error('El diseño contiene un color LED inválido.');
  return Uint32Array.from(pixels);
 }
 const originals=accents.map((accent,index)=>{

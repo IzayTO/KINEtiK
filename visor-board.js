@@ -46,7 +46,8 @@ export class BoardViewport {
 }
 
 export class VisorBoard {
-  constructor(canvas, editor, cols=COLS, rows=ROWS) {
+  constructor(canvas, editor, cols=COLS, rows=ROWS, cutout=null) {
+    this.cutout=cutout;
     this.canvas = canvas; this.ctx = canvas.getContext('2d'); this.editor = editor;
     this.view = new BoardViewport(cols,rows); this.touches = new Map(); this.mode = 'idle';
     canvas.onpointerdown = e => this.down(e);
@@ -93,10 +94,10 @@ export class VisorBoard {
       this.mode='fill';this.editor.flood(cell);this.editor.redraw();return;
     }
     this.moved=false;
-    this.ink=this.editor.tool==='erase'?0:this.editor.color;
+    this.ink=this.editor.tool==='erase'?0:this.editor.tool==='cut'?this.cutout:this.editor.color;
     // A stationary tap toggles a matching LED. A stroke paints continuously.
     const current=this.before[cell.y*this.view.cols+cell.x];
-    strokeLine(this.editor.pixels,cell,cell,current===this.ink?0:this.ink,this.editor.mirror,this.view.cols);
+    strokeLine(this.editor.pixels,cell,cell,current===this.ink&&this.editor.tool==='pencil'?0:this.ink,this.editor.mirror,this.view.cols);
     this.editor.redraw();
   }
   move(e) {
@@ -153,6 +154,13 @@ export class VisorBoard {
       const left=v.left+x*size+gap/2, top=v.top+y*size+gap/2;
       const edge=Math.max(.2,size-gap);
       if (left>w || top>h || left+edge<0 || top+edge<0) continue;
+      if (value===this.cutout) {
+        const half=edge/2;
+        ctx.fillStyle='#344353';ctx.fillRect(left,top,edge,edge);
+        ctx.fillStyle='#617082';ctx.fillRect(left,top,half,half);
+        ctx.fillRect(left+half,top+half,half,half);
+        continue;
+      }
       ctx.fillStyle=value?colorCode(value):'#334252';
       ctx.fillRect(left,top,edge,edge);
       if (edge>12) {

@@ -1,7 +1,7 @@
 import * as T from './three.module.min.js';
 import {PROJECTILE_LIMIT} from './ordnance.js';
 import {BOTS} from './visor-designs.js';
-import {COLS,ROWS,WEAPON_KEYS,charms} from './charm-designs.js';
+import {COLS,ROWS,CUTOUT,WEAPON_KEYS,charms} from './charm-designs.js';
 
 const indices=new Map(WEAPON_KEYS.map((kind,i)=>[kind,i]));
 // Local attachment, panel width in metres, facing angle, and drop in panel widths.
@@ -53,7 +53,7 @@ export class CharmAtlas{
    let pos=((top+y)*this.width+col)*4;
    for(let x=0;x<COLS;x++){
     const code=pixels[y*COLS+x],rgb=code?code-1:0x12191e;
-    this.bytes[pos++]=rgb>>16;this.bytes[pos++]=(rgb>>8)&255;this.bytes[pos++]=rgb&255;this.bytes[pos++]=255;
+    this.bytes[pos++]=rgb>>16;this.bytes[pos++]=(rgb>>8)&255;this.bytes[pos++]=rgb&255;this.bytes[pos++]=code===CUTOUT?0:255;
    }
   }
   this.texture.needsUpdate=true;
@@ -115,6 +115,7 @@ const fragmentShader=`
    vec2 coord=vec2(gl_FrontFacing?grid.x:1.-grid.x,1.-grid.y);
    vec2 cell=clamp(floor(coord*vec2(24.,10.)),vec2(0.),vec2(23.,9.));
    gl_FragColor=texture2D(atlas,(vTile+cell+.5)/atlasSize);
+   if(gl_FragColor.a<.5)discard;
   }else{
    // On the rear, keep the hidden tab from overprinting the back of the screen.
    if(vPart<.01 && grid.y<.68)discard;
@@ -154,9 +155,9 @@ export function swingTarget(time,actor){
  const arsenal=actor.arsenal,body=actor.body,phase=time*(body.speed>8?10.2:7.1)+actor.id*.72;
  const stride=Math.min(1,body.speed/10);
  const age=arsenal.time-arsenal.lastShot;
- const kick=age>=0&&age<.42?Math.sin(age*29)*Math.exp(-age*10)*.095:0;
- return Math.sin(phase)*(.012+stride*.075)+(body.sliding?-.083:0)+kick+
-  (arsenal.reload?Math.sin(arsenal.reloadProgress*Math.PI*2)*.08:0);
+ const kick=age>=0&&age<.42?Math.sin(age*29)*Math.exp(-age*8)*.27:0;
+ return Math.sin(phase)*(.026+stride*.31)+(body.sliding?-.19:0)+kick+
+  (arsenal.reload?Math.sin(arsenal.reloadProgress*Math.PI*2)*.23:0);
 }
 export class MatchCharms{
  constructor(view){
@@ -166,7 +167,7 @@ export class MatchCharms{
  update(view,dt){
   const m=view.match;this.hand.begin();
   if(m){
-   const time=m.time,follow=1-Math.exp(-12*dt);
+   const time=m.time,follow=1-Math.exp(-17*dt);
    for(const r of view.soldiers.rigs){
     const a=r.bot,id=a.id,swing=this.angles[id]+(swingTarget(time,a)-this.angles[id])*follow;this.angles[id]=swing;
     const field=time-a.antidoteAt<.6?'antidote':a.throwAction?.kind||a.held;

@@ -24,7 +24,7 @@ export class FieldView{
  }
  update(dt,p,input,alpha,charms){const m=this.match;if(!m)return;const time=m.time,o=m.ordnance;this.right.setFromMatrixColumn(this.view.camera.matrixWorld,0);this.up.setFromMatrixColumn(this.view.camera.matrixWorld,1);
   for(let k=0;k<kinds.length;k++){const mesh=this.projectileBatches[k];let count=0;for(const q of o.projectiles)if(q.active&&q.kind===kinds[k]){this.temp.position.set(q.previous.x+(q.x-q.previous.x)*alpha,q.previous.y+(q.y-q.previous.y)*alpha,q.previous.z+(q.z-q.previous.z)*alpha);this.temp.rotation.set(q.rest?0:(time-q.born)*5,q.spin,0);if(q.kind==='rocket')this.temp.rotation.set(Math.asin(clamp(q.vy/52,-1,1)),Math.atan2(-q.vx,-q.vz),0,'YXZ');this.temp.scale.setScalar(1);this.temp.updateMatrix();mesh.setMatrixAt(count++,this.temp.matrix);
-   if(charms&&q.kind!=='rocket')charms.actors.add(q.owner.id,q.kind,this.temp.matrix,q.rest?0:Math.sin((time-q.born)*9)*.045);
+   if(charms&&q.kind!=='rocket')charms.actors.add(q.owner.id,q.kind,this.temp.matrix,q.rest?0:Math.sin((time-q.born)*9)*.15);
   }for(const r of this.view.soldiers?.rigs||[]){const b=r.bot,kind=time-b.antidoteAt<.6?'antidote':b.throwAction?.kind||b.held;if((b.human&&!this.match.remote.engaged)||!b.alive||kind!==kinds[k]||(b.throwAction?.released&&kind!=='antidote'))continue;this.matrix.copy(r.arms[1].wrist.matrixWorld);this.temp.position.set(0,-.015,0);this.temp.rotation.set(.3,0,0);this.temp.scale.setScalar(1);this.temp.updateMatrix();this.matrix.multiply(this.temp.matrix);mesh.setMatrixAt(count++,this.matrix);
    if(charms)charms.actors.add(b.id,kind,this.matrix,charms.angles[b.id],charms.angles[b.id]*.28);
   }mesh.count=count;mesh.visible=count>0;mesh.instanceMatrix.needsUpdate=true;}

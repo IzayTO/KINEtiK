@@ -1,7 +1,7 @@
 import {BOTS,colorCode,sameDesign,DesignHistory} from './visor-designs.js';
 import {botName} from './bot-roster.js';
 import {VisorBoard} from './visor-board.js';
-import {COLS,ROWS,CELLS,CHARMS,MAX_JSON,charms,floodCharm,encodeCharm,decodeCharm} from './charm-designs.js';
+import {COLS,ROWS,CELLS,CUTOUT,CHARMS,MAX_JSON,charms,floodCharm,encodeCharm,decodeCharm} from './charm-designs.js';
 import {CharmPreview} from './charm-preview.js';
 
 const actors=Array.from({length:BOTS+1},(_,id)=>id);
@@ -20,7 +20,7 @@ function markup(){return `
  <canvas id="charm-grid" aria-label="Cuadrícula editable de 24 columnas y 10 filas"></canvas>
  <div class="ve-navigation"><div class="ve-zoom"><button type="button" data-act="minus" aria-label="Alejar cuadrícula">−</button><output id="charm-scale">100%</output><button type="button" data-act="plus" aria-label="Acercar cuadrícula">+</button></div>${button('pan','Desplazar')}${button('mirror','Simetría')}</div>
  <div class="ve-colors"><strong>Color</strong>${inks.map(hex=>'<button type="button" data-ink="'+hex+'" style="--ink:'+hex+'" aria-label="Color '+hex+'"></button>').join('')}<label class="ve-custom">＋<input type="color" data-field="color" value="#78f9d7" aria-label="Elegir color"></label></div>
- <div class="ve-tools">${[['pencil','Lápiz'],['erase','Borrar'],['bucket','Rellenar zona'],['fill','Llenar todo'],['off','Apagar todo'],['undo','Deshacer'],['redo','Rehacer']].map(([k,v])=>button(k,v)).join('')}</div></section>
+ <div class="ve-tools">${[['pencil','Lápiz'],['erase','Borrar'],['cut','Recortar LED'],['bucket','Rellenar zona'],['fill','Llenar todo'],['off','Apagar todo'],['undo','Deshacer'],['redo','Rehacer']].map(([k,v])=>button(k,v)).join('')}</div></section>
  <section class="ve-card ve-preview"><header><h2>Vista previa 3D</h2>${button('whole','Ver arma completa')}</header>
  <div class="ve-stage"><canvas id="charm-model" aria-label="Arma y llavero en 3D"></canvas><span class="ve-preview-error" hidden>Vista 3D no disponible.</span></div>
  <div class="ve-stage-caption"><span data-field="model-name"></span><span>Arrastra para girar</span></div></section></div>
@@ -36,7 +36,7 @@ export class CharmEditor{
   this.histories=new Map();this.clipboard=null;this.tool='pencil';this.mirror=false;this.selectionVersion=0;
   this.dialog=document.createElement('dialog');this.dialog.id='charm-editor';this.dialog.setAttribute('aria-label','Editor de llaveros LED');
   this.dialog.innerHTML=markup();document.body.append(this.dialog);
-  this.board=new VisorBoard(this.el('#charm-grid'),this,COLS,ROWS);
+  this.board=new VisorBoard(this.el('#charm-grid'),this,COLS,ROWS,CUTOUT);
   this.checks=Array.from(this.el('.charm-checks').querySelectorAll('input'));
   this.field('actor').onchange=()=>this.select(Number(this.field('actor').value),this.weapon);
   this.field('weapon').onchange=()=>this.select(this.actor,this.field('weapon').value);
@@ -100,7 +100,7 @@ export class CharmEditor{
   this.act('recipients').textContent='Aplicar a · '+(selected.length===1?actorName(selected[0]):selected.length+' personajes');
   this.act('save').disabled=!selected.length;
  }
- setColor(hex){this.color=parseInt(hex.slice(1),16)+1;if(this.tool==='erase'||this.tool==='pan')this.tool='pencil';this.field('color').value=hex;this.redraw(false);}
+ setColor(hex){this.color=parseInt(hex.slice(1),16)+1;if(this.tool==='erase'||this.tool==='cut'||this.tool==='pan')this.tool='pencil';this.field('color').value=hex;this.redraw(false);}
  flood(cell){floodCharm(this.pixels,cell.x,cell.y,this.color,this.mirror);}
  store(){
   const ids=this.selected;
@@ -118,7 +118,7 @@ export class CharmEditor{
   if(apply&&sameDesign(before,this.pixels)){this.store();this.redraw();}else this.commit(before);
  }
  action(name){
-  if(['pencil','erase','bucket','pan'].includes(name)){this.tool=name;this.redraw(false);return;}
+  if(['pencil','erase','cut','bucket','pan'].includes(name)){this.tool=name;this.redraw(false);return;}
   switch(name){
    case 'close':this.close();return;
    case 'recipients':this.el('.charm-recipients').hidden=!this.el('.charm-recipients').hidden;return;
@@ -174,7 +174,7 @@ export class CharmEditor{
    const zoom=this.board.view.zoom;this.el('#charm-scale').textContent=Math.round(zoom*100)+'%';
    this.act('minus').disabled=zoom<=1.001;this.act('plus').disabled=zoom>=5.999;
    this.act('undo').disabled=!this.history.past.length;this.act('redo').disabled=!this.history.future.length;this.act('paste').disabled=!this.clipboard;
-   for(const name of ['pencil','erase','bucket','pan','mirror'])this.act(name).setAttribute('aria-pressed',String(name==='mirror'?this.mirror:name===this.tool));
+   for(const name of ['pencil','erase','cut','bucket','pan','mirror'])this.act(name).setAttribute('aria-pressed',String(name==='mirror'?this.mirror:name===this.tool));
    for(const b of this.dialog.querySelectorAll('[data-ink]'))b.setAttribute('aria-pressed',String(b.dataset.ink===colorCode(this.color)));
   });
  }
