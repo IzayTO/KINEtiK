@@ -1,10 +1,12 @@
-// The four markings are relative to this scope's base lens. At the highest
-// marking, 1.04 world metres span the sight at 100 m (waist to helmet).
 export const OPTIC_STEPS=Object.freeze([1.5,2,3,4]);
+const retainedZoom=Object.freeze({1.5:.60,2:.70,3:.80,4:.85});
 export const opticDiameter=(width,height)=>.84*Math.min(width,height);
-export function opticZoom(width,height,verticalFov,mark){
- const focalPixels=opticDiameter(width,height)*(100/1.04)*(mark/4);
- return focalPixels*2*Math.tan(verticalFov*Math.PI/360)/height;
+export function opticZoom(width,height,verticalFov,mark,normalHorizontalFov){
+ const previousFocal=opticDiameter(width,height)*(100/1.04)*(mark/4);
+ const cameraFocal=height/(2*Math.tan(verticalFov*Math.PI/360));
+ const normalFocal=normalHorizontalFov===undefined?cameraFocal:width/(2*Math.tan(normalHorizontalFov*Math.PI/360));
+ // Interpolate projected target size from hip view to the previous scope setting.
+ return (normalFocal+(previousFocal-normalFocal)*retainedZoom[mark])/cameraFocal;
 }
 export function updateOptic(view,input,arsenal){
  const m=view.match, a=m?.player;
@@ -12,7 +14,7 @@ export function updateOptic(view,input,arsenal){
   !a.consuming&&!a.opening&&m.time-a.antidoteAt>=.6&&!m.remote.engaged&&!m.nuclear.restricted&&
   arsenal?.selected===4&&!arsenal.reload&&arsenal.time>=arsenal.switchUntil&&input.aim&&view.aim>.55);
  const mark=view.scopeMark??OPTIC_STEPS[0];
- const zoom=scoped?opticZoom(view.width,view.height,view.camera.fov,mark):1;
+ const zoom=scoped?opticZoom(view.width,view.height,view.camera.fov,mark,view.params.hFov):1;
  if(Math.abs(view.camera.zoom-zoom)>1e-6){view.camera.zoom=zoom;view.camera.updateProjectionMatrix();}
  // Brief angular recoil measured as a fraction of the lens, including at 4×.
  const age=view.time-view.shotTime;
