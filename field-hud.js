@@ -13,7 +13,7 @@ export class FieldHUD{
  }
  reset(){for(const n of this.numbers){n.start=-100;n.el.hidden=true;}for(const d of this.directions){d.start=-100;d.el.hidden=true;}this.timer=0;}
  onEvent(e){if(e.type!=='damage')return;const m=this.match;
-  if(e.source===0&&e.actor!==0){for(const [value,shield]of [[e.shield,true],[e.health,false]])if(value>0){const n=this.numbers[this.numberIndex++%this.numbers.length];Object.assign(n,{start:m.time,x:e.position.x,y:e.position.y+.06,z:e.position.z,offset:this.sequence++});n.el.textContent='−'+(value<1?value.toFixed(1):Math.round(value));n.el.style.color=shield?'#67bfff':'#ffffff';n.split=shield?0:1;}}
+  if(e.source===0&&e.actor!==0){for(const [value,shield]of [[e.shield,true],[e.health,false]])if(value>0){const n=this.numbers[this.numberIndex++%this.numbers.length];Object.assign(n,{start:m.time,x:e.position.x,y:e.position.y+.06,z:e.position.z,offset:this.sequence++});n.el.textContent='−'+(value<1?value.toFixed(1):Math.round(value));n.el.style.color=shield?'#ffaaa0':'#ff5148';n.split=shield?0:1;}}
   if(e.actor===0){const angle=Math.atan2(-(e.origin.x-m.player.body.x),-(e.origin.z-m.player.body.z));let d=this.directions.find(d=>m.time-d.start<.7&&Math.abs(angleDelta(Math.atan2(-(d.x-m.player.body.x),-(d.z-m.player.body.z)),angle))<.4)||this.directions[this.directionIndex++%8];Object.assign(d,{start:m.time,x:e.origin.x,z:e.origin.z});}
  }
  project(x,y,z){const p=this.vector;p.set(x,y,z).project(this.view.camera);return p.z>-1&&p.z<1&&Math.abs(p.x)<1.2&&Math.abs(p.y)<1.2;}

@@ -45,7 +45,7 @@ export class Nuclear{
   m.events.push({type:'atomic-impact',actor:0,position:{...point}});
  }
  pulse(){const m=this.match,index=++this.pulses;for(const {actor:a,health}of this.roster){a.health=index===ATOMIC_PULSES?0:health<10?health:health*(ATOMIC_PULSES-index)/ATOMIC_PULSES;a.lastDamage=m.time;a.hit=.25;
-   if(index===ATOMIC_PULSES){a.alive=false;a.deaths++;a.deathTime=m.time;a.deadUntil=Infinity;a.carrying=null;if(a!==m.player&&m.enemy(m.player,a))m.player.kills++;}}
+   if(index===ATOMIC_PULSES){m.fall(a);a.alive=false;a.deaths++;a.deathTime=m.time;a.deadUntil=Infinity;a.carrying=null;if(a!==m.player&&m.enemy(m.player,a))m.player.kills++;}}
   m.events.push({type:'atomic-pulse',actor:0,index});if(index===ATOMIC_PULSES){this.state='aftermath';m.events.push({type:'atomic-death',actor:0,line:this.deathLine});}
  }
  settle(dt){for(const {actor:a}of this.roster){const p=a.body;p.previous.x=p.x;p.previous.y=p.y;p.previous.z=p.z;p.vx=p.vz=0;p.vy-=this.match.params.gravity*dt;p.move(dt);}}

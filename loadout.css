@@ -23,3 +23,8 @@
 .charm-collection>div,.charm-collection label{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .charm-collection input,.charm-collection select{max-width:min(220px,75vw)}
 @media(max-height:550px) and (orientation:landscape){#charm-editor .ve-head{padding-bottom:2px}#charm-editor .ve-head button,#charm-editor .charm-loadout button,#charm-editor select{min-height:30px}#charm-grid{max-height:40dvh}}
+
+#prop-haze{background:radial-gradient(ellipse at 58% 44%,#777a78,#4d5355 66%,#353c40);transition:opacity .12s linear}
+.hud-editing #prop-haze,.squad-showing #prop-haze,.verdict-showing #prop-haze{display:none}
+.inspect-button small{font-size:6.5px}
+#hitmarker{color:#ff655b}

@@ -141,7 +141,8 @@ function tick(now){
       if(!match.remote.engaged){match.player.yaw=input.yaw;match.player.pitch=input.pitch;}
       if(match.player.alive)player.step(h,match.remote.engaged?{yaw:match.player.yaw}:sample);steps++;
       for(const action of (match.player.alive&&!match.remote.engaged?sample.actions:[])){
-        if(action==='atomic'){if(!match.nuclear.activate())toast('Requiere 41 bajas y usar RC, apoyo aéreo y R-12');sample.fire=sample.fireStart=false;}
+        if(action==='inspect'){view.weaponFX.inspect();}
+        else if(action==='atomic'){if(!match.nuclear.activate())toast('Requiere 41 bajas y usar RC, apoyo aéreo y R-12');sample.fire=sample.fireStart=false;}
         else if(action==='airstrike'){if(!supportUI.open())toast(match.support.flight?'Apoyo aéreo ya en curso':'Consigue 20 bajas para desbloquear apoyo aéreo');sample.fire=sample.fireStart=sample.aim=false;sample.x=sample.z=0;sample.fireRelease=null;if(supportUI.opened)break;}
         else if(action==='rc'){if(match.remote.deploy(input.yaw,input.pitch)){gameUI.prepareRemote();input.clear();input.remoteMode=true;input.pitch=match.remote.pitch;sample.pitch=input.pitch;sample.fire=sample.fireStart=false;sample.jump=false;}else toast(match.player.rcCharges?'Busca espacio en el suelo para desplegar el RC':'Consigue 10 bajas para desbloquear un RC');}
         else if(action==='scope-zoom'){if(arsenal.selected===4&&sample.aim&&!match.player.held&&!arsenal.reload)view.scopeMark=nextOpticMark(view.scopeMark??1.5);}
@@ -183,6 +184,7 @@ function tick(now){
     });
     metrics.physicsMS=performance.now()-physicsStart;metrics.physicsSteps=steps;
     audio.setListener(match.remote.engaged?match.remote.body:player,input.yaw);audio.motor(match.remote.ready,match.remote.body.speed,match.remote.command.sprint);audio.aircraft(match.support.flight);const sampled=match.staging?{yaw:input.yaw,pitch:input.pitch,x:0,z:0,aim:false,fire:false}:input.sample(false);match.nuclear.filterInput(sampled);view.update(dt,player,sampled,alpha,arsenal);
+    $('prop-haze').style.opacity=match.player.alive&&match.reactive.blocksSight(view.camera.position)?'.985':'0';
     const scoped=view.scoped&&!supportUI.opened&&!editor.editing;
     $('optic-mask').hidden=$('optic-step').hidden=!scoped;
     $('hud').classList.toggle('scoped',scoped);
@@ -245,11 +247,14 @@ function setupConfigTransfer(){
  $('configuration-file').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;status.textContent='Cargando configuración…';try{if(file.size>262144)throw new Error('El archivo de ajustes es demasiado grande.');const data=parseConfiguration(JSON.parse(await file.text()),snapshot(),controls);Object.assign(params,data.settings);Object.assign(preferences,data.preferences);editor.store.layouts=data.hud;editor.store.draft=null;editor.store.save();editor.apply();matchConfig=data.match;saveSettings();savePreferences(preferences);localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));for(const [key,val]of Object.entries(matchConfig)){const el=$('match-'+key);if(el){if(el.tagName==='SELECT'&&![...el.options].some(o=>o.value===String(val))){const option=document.createElement('option');option.value=String(val);option.textContent=String(val);el.append(option);}el.value=String(val);}}$('map-select').value=matchConfig.map;$('match-mode').onchange();$('match-bots').oninput();arsenal.autoReload=preferences.autoReload;refreshSettings();refreshV2();resizeGame(true);status.textContent='Configuración personalizada aplicada. El mapa elegido se usa en la siguiente partida.';toast('Configuración personalizada aplicada');}catch(error){status.textContent='No se pudo importar: '+error.message;}finally{e.target.value='';}};
 }
 function beginSimulation(config=matchConfig){
- presentation?.close();supportUI?.reset();selectLevel(config.map||'nodo09');matchConfig={...matchConfig,...config};try{localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));}catch{}match.start(matchConfig);aimSupport.reset();combatUI.reset();fieldHUD.reset();gameUI.reset();operationUI.reset();view.attachMatch(match);player.previous={x:player.x,y:player.y,z:player.z};input.yaw=match.player.yaw;input.pitch=0;input.clear();clock.reset();events.length=0;arsenal.autoReload=preferences.autoReload;view.eye=1.67;view.landing=0;playTime=0;hits=shots=0;$('hits').textContent='00';$('match-result').hidden=true;$('death-feedback').hidden=true;updateMatchHUD();
+ $('prop-haze').style.opacity='0';presentation?.close();supportUI?.reset();selectLevel(config.map||'nodo09');matchConfig={...matchConfig,...config};try{localStorage.setItem('kinetic-match-v3',JSON.stringify(matchConfig));}catch{}match.start(matchConfig);aimSupport.reset();combatUI.reset();fieldHUD.reset();gameUI.reset();operationUI.reset();view.attachMatch(match);player.previous={x:player.x,y:player.y,z:player.z};input.yaw=match.player.yaw;input.pitch=0;input.clear();clock.reset();events.length=0;arsenal.autoReload=preferences.autoReload;view.eye=1.67;view.landing=0;playTime=0;hits=shots=0;$('hits').textContent='00';$('match-result').hidden=true;$('death-feedback').hidden=true;updateMatchHUD();
 }
 function registerHits(result){if(result.length){hits+=result.length;hitTimer=.12;audio.sound('hit');$('hits').textContent=String(hits).padStart(2,'0');}}
 function processMatchEvents(){
  for(const e of match.events){
+  if(e.type==='actor-fall'){view.fallen.add(e);continue;}
+  if(e.type==='prop-flame'||e.type==='prop-discharge'){audio.sound(e.type==='prop-flame'?'explosion':'shield-hit',e.position);continue;}
+  if(e.type==='shot'||e.type==='rocket-shot')view.weaponFX.shot(e);
   match.awards.objective(e);operationUI.onEvent(e);combatUI.onEvent(e);fieldHUD.onEvent(e);gameUI.onEvent(e);
   if(e.type==='atomic-blackout'){supportUI.close(false);input.active=playing;input.clear();}
   if(e.type==='atomic-pulse')audio.atomicStage=e.index;
@@ -272,8 +277,9 @@ function updateMatchHUD(){
 }
 function openMatchMenu(){supportUI?.close(false);playing=false;input.active=false;input.clear();clock.reset();if(document.pointerLockElement)document.exitPointerLock();$('welcome').hidden=true;$('hud').hidden=true;$('touch-controls').hidden=true;$('pause').hidden=false;$('match-result').hidden=true;$('resume').hidden=!started;tab('match');}
 function openOptions(){supportUI?.close(false);playing=false;input.active=false;input.clear();clock.reset();audio.suspend();if(document.pointerLockElement)document.exitPointerLock();$('welcome').hidden=true;$('hud').hidden=true;$('touch-controls').hidden=true;$('pause').hidden=false;$('resume').hidden=!started;tab('settings');}
-function home(){supportUI?.reset();match.nuclear.reset();operationUI.reset();playing=false;started=false;match.running=false;match.remote.reset();gameUI.reset();gameUI.releaseCapture();input.active=false;input.clear();clock.reset();audio.suspend();if(document.pointerLockElement)document.exitPointerLock();$('pause').hidden=true;$('welcome').hidden=false;$('hud').hidden=true;$('touch-controls').hidden=true;$('match-result').hidden=true;}
+function home(){$('prop-haze').style.opacity='0';supportUI?.reset();match.nuclear.reset();operationUI.reset();playing=false;started=false;match.running=false;match.remote.reset();gameUI.reset();gameUI.releaseCapture();input.active=false;input.clear();clock.reset();audio.suspend();if(document.pointerLockElement)document.exitPointerLock();$('pause').hidden=true;$('welcome').hidden=false;$('hud').hidden=true;$('touch-controls').hidden=true;$('match-result').hidden=true;}
 function showSquad(){
+ $('prop-haze').style.opacity='0';
  playing=false;input.active=false;input.clear();clock.reset();audio.suspend();
  supportUI.reset();gameUI.reset();combatUI.reset();operationUI.reset();
  $('pause').hidden=true;$('hud').hidden=true;$('touch-controls').hidden=true;

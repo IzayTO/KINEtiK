@@ -1,6 +1,7 @@
 /* NODO 09 — an authored 96 x 96 m maintenance campus, no random placement.
    +z: arrival / south. -z: control hall / north. All dimensions are metres.
    Render and collision descriptions are produced together, once at startup. */
+import {mapProps} from './reactive-props.js';
 import {rectPoly,makeCollider} from './physics.js';
 export const PALETTE={concrete:0xb9beb5,light:0xd1d2c5,dark:0x364d53,steel:0x607980,
   floor:0x7e8a87,asphalt:0x4b6267,coral:0xe77852,teal:0x38a89d,yellow:0xe8be63,
@@ -170,5 +171,5 @@ export function createLevel(){
   zone('01 · PATIO',0,30,78,30);zone('02 · TALLER',-30,-1,25,38);
   zone('03 · TERRAZAS',24,4,30,29);zone('04 · CONTROL',4,-33,38,20);
   zone('05 · VÍA RÁPIDA',43,0,8,88);zone('06 · TRANSFERENCIA',0,-3,36,35);
-  return {solids,visuals,labels,targets,zones,spawn:{x:0,y:0,z:39,yaw:0},name:'NODO 09',width:96,depth:96};
+  return {reactiveSites:mapProps('nodo09',solids),solids,visuals,labels,targets,zones,spawn:{x:0,y:0,z:39,yaw:0},name:'NODO 09',width:96,depth:96};
 }

@@ -3,6 +3,7 @@ import {PROJECTILE_LIMIT} from './ordnance.js';
 import {BOTS} from './visor-designs.js';
 import {COLS,ROWS,CUTOUT,WEAPON_KEYS,charms} from './charm-designs.js';
 
+const rollAxis=new T.Vector3(0,0,1),hang=new T.Quaternion();
 const indices=new Map(WEAPON_KEYS.map((kind,i)=>[kind,i]));
 // Local attachment, panel width in metres, facing angle, and drop in panel widths.
 const mounts={
@@ -135,10 +136,13 @@ export class CharmBatch{
   this.local=new T.Object3D();this.matrix=new T.Matrix4();this.delta=new T.Vector3();this.inverse=new T.Quaternion();this.used=0;
  }
  begin(){this.used=0;}
- add(id,kind,base,swing=0,twist=0,soldier=false,slideZ=0){
+ add(id,kind,base,swing=0,twist=0,soldier=false,slideZ=0,cant=0){
   const mount=charmMount(kind,soldier);if(!mount)return;
   const [x,y,z,size,yaw,drop]=mount,o=this.local;
-  o.position.set(x,y,z+slideZ);o.scale.setScalar(size);o.rotation.set(swing*.45,yaw+twist,swing,'YXZ');o.updateMatrix();
+  o.position.set(x,y,z+slideZ);o.scale.setScalar(size);o.rotation.set(swing*.45,yaw*(1-.58*cant)+twist,swing,'YXZ');
+  // The socket rolls with the weapon. Gravity keeps the hanging LEDs underneath it.
+  if(cant)o.quaternion.premultiply(hang.setFromAxisAngle(rollAxis,-.68*cant));
+  o.updateMatrix();
   const i=this.used++;this.matrix.multiplyMatrices(base,o.matrix);this.mesh.setMatrixAt(i,this.matrix);
   this.tiles.setXYZ(i,indices.get(kind)*COLS,id*ROWS,drop);
   const d=this.delta;
@@ -176,13 +180,13 @@ export class MatchCharms{
     const kind=field||a.arsenal.weapon.id;
     if(a.atomicDown||!a.alive||field&&a.throwAction?.released&&field!=='antidote'&&field!=='rocket')continue;
     if(a.human&&!m.remote.engaged){
-     if(view.scoped||m.nuclear.impacted)continue;
+     if((view.scoped&&!view.cantedScope)||m.nuclear.impacted)continue;
      const model=view.models[a.arsenal.selected];
      const root=field?view.field.handItems[field]:(model.item||model.root);
      if(!root?.visible)continue;
      root.updateWorldMatrix(true,false);
      const slideZ=kind==='shotgun'?model.pump.position.z-view.restingWeaponParts.get(model.pump).elements[14]:0;
-     this.hand.add(id,kind,root.matrixWorld,swing,swing*.28,false,slideZ);
+     this.hand.add(id,kind,root.matrixWorld,swing,swing*.28,false,slideZ,view.aim*(view.weaponFX?.cant||0));
     }else if(!field){
      this.actors.add(id,kind,r.gun.matrixWorld,swing,swing*.28,true);
     }

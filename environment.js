@@ -63,6 +63,7 @@ export function bakeNightGeometry(meshes,solids,lamps=LAMPS){
 
 export class NightEnvironment{
  constructor(view){this.view=view;this.night=false;this.nightMesh=null;this.timer=0;this.pool=[];this.alarmUniforms={uAlarmMix:{value:0},uAlarmPulse:{value:1},uAfterImpact:{value:0}};this.warm=new T.Color(0xffd394);this.red=new T.Color(0xff0802);
+  this.sunset=new T.Color(0xffb57f);this.moonBlue=new T.Color(0x829ac7);this.sandFog=new T.Color(0xdfbfa3);this.moonFog=new T.Color(0x344562);
   this.daySky=view.sky.geometry.attributes.color.array.slice();this.dayFog=view.scene.fog.color.clone();this.nightFog=new T.Color(0x171e2a);this.dayBodies=[...view.sky.children];
   this.savedLights=[...view.scene.children,...view.gunScene.children].filter(o=>o.isLight).map(light=>({light,color:light.color.clone(),ground:light.groundColor?.clone(),intensity:light.intensity}));
   this.lamps=view.level.lamps||LAMPS;this.buildFixtures();this.buildNightSky();
@@ -99,10 +100,19 @@ export class NightEnvironment{
   for(const item of this.savedLights){const {light}=item;light.color.copy(night?new T.Color(0xffdeb1):item.color);if(light.groundColor)light.groundColor.copy(night?new T.Color(0x4a4541):item.ground);light.intensity=night?(light.isHemisphereLight?1.2:.65):item.intensity;}
   for(const slot of this.pool){slot.light.visible=night;slot.light.intensity=0;slot.energy=0;slot.index=slot.next=-1;}this.timer=0;
  }
- update(dt,player){if(!this.night)return;const n=this.view.match?.nuclear,active=n?.active,age=active?n.age:0,alarm=active?clamp(age/.7,0,1):0,pulse=active?atomicAlarm(age):1;this.alarmUniforms.uAlarmMix.value=alarm;this.alarmUniforms.uAlarmPulse.value=pulse;this.alarmUniforms.uAfterImpact.value=n?.impacted?clamp(n.impactAge/.2,0,1):0;this.emitMaterial.color.copy(this.warm).lerp(this.red,alarm).multiplyScalar(active?pulse:1);this.timer-=dt;
+ update(dt,player){
+  const v=this.view,m=v.match,t=m?.time||0,cycle=.5-.5*Math.cos(t*Math.PI*2/(this.night?112:148));
+  if(!m?.nuclear.active){
+   v.sky.material.color.setHex(0xffffff).lerp(this.night?this.moonBlue:this.sunset,cycle*(this.night?.38:.44));
+   v.scene.fog.color.copy(this.night?this.nightFog:this.dayFog).lerp(this.night?this.moonFog:this.sandFog,.45*cycle);
+  }else v.sky.material.color.setHex(0xffffff);
+  if(!this.night){
+   for(const s of this.savedLights){s.light.color.copy(s.color).lerp(this.sunset,cycle*.31);s.light.intensity=s.intensity*(1-cycle*.12);}
+   return;
+  }const n=this.view.match?.nuclear,active=n?.active,age=active?n.age:0,alarm=active?clamp(age/.7,0,1):0,pulse=active?atomicAlarm(age):1;this.alarmUniforms.uAlarmMix.value=alarm;this.alarmUniforms.uAlarmPulse.value=pulse;this.alarmUniforms.uAfterImpact.value=n?.impacted?clamp(n.impactAge/.2,0,1):0;this.emitMaterial.color.copy(this.warm).lerp(this.red,alarm).multiplyScalar(active?pulse:1);this.timer-=dt;
   // Remove the ordinary hemisphere/directional fill during the alarm. The
   // existing local lamps and the baked red illumination are the only strong light.
-  const fillAlarm=n?.impacted?0:alarm;for(const {light}of this.savedLights){light.color.setHex(0xffdeb1).lerp(this.red,fillAlarm);if(light.groundColor)light.groundColor.setHex(fillAlarm>.5?0x050000:0x4a4541);light.intensity=(light.isHemisphereLight?1.2:.65)*(1-.996*fillAlarm);}
+  const fillAlarm=n?.impacted?0:alarm;for(const {light}of this.savedLights){light.color.setHex(0xffdeb1).lerp(this.moonBlue,cycle*.28).lerp(this.red,fillAlarm);if(light.groundColor)light.groundColor.setHex(fillAlarm>.5?0x050000:0x4a4541);light.intensity=(light.isHemisphereLight?1.2:.65)*(1-.996*fillAlarm);}
   if(this.timer<=0){this.timer=.25;let first=-1,second=-1,d1=Infinity,d2=Infinity;
    for(let i=0;i<this.lamps.length;i++){const l=this.lamps[i],d=Math.hypot(player.x-l.x,player.y+1-l.y,player.z-l.z);if(d<d1){d2=d1;second=first;d1=d;first=i;}else if(d<d2){d2=d;second=i;}}
    const selected=[first,second];for(const slot of this.pool)if(selected.includes(slot.next))selected.splice(selected.indexOf(slot.next),1);else slot.next=-1;for(const slot of this.pool)if(slot.next<0)slot.next=selected.shift()??-1;

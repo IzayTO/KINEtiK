@@ -5,7 +5,7 @@ import * as T from './three.module.min.js';
 import {clamp,damp,surfaceY} from './physics.js';
 import {angleDelta} from './navigation.js';
 const ikDir=new T.Vector3(),ikBend=new T.Vector3(),ikElbow=new T.Vector3(),ikTarget=new T.Vector3(),ikUnit=new T.Vector3();
-const flashColor=new T.Color(0xb8ffe3),footTarget=new T.Vector3(),pelvisInverse=new T.Quaternion();
+const hitColor=new T.Color(0xff201b),flashColor=new T.Color(0xb8ffe3),footTarget=new T.Vector3(),pelvisInverse=new T.Quaternion();
 const Y=new T.Vector3(0,-1,0),v=new T.Vector3(),q=new T.Quaternion(),matrix=new T.Matrix4(),color=new T.Color();
 // Eight-sided, tapered armor volume. Deliberate bevels, not voxel limbs.
 
@@ -93,8 +93,8 @@ export class SoldierBatch{
    r.pelvis.rotation.set(-clamp(r.speed*.006+r.accel*.045,-.06,.11)*(1-crouch),0,r.bank+Math.sin(r.phase)*.018*r.moving);
    r.root.rotation.z=r.death*1.4;r.root.position.y+=Math.sin(r.death*1.4)*.32;
    const twist=clamp(angleDelta(r.bodyYaw,b.yaw),-.95,.95);r.abdomen.position.y=.19-slide*.10;r.abdomen.rotation.order='YXZ';r.abdomen.rotation.set(lean,twist*.35,-r.bank*.35);
-   r.chest.rotation.y=damp(r.chest.rotation.y,twist*.65,15,dt);r.neck.rotation.y=damp(r.neck.rotation.y,clamp(angleDelta(r.bodyYaw+r.abdomen.rotation.y+r.chest.rotation.y,b.waiting?b.waitHeadYaw:b.yaw),b.waiting?-.85:-.5,b.waiting?.85:.5),21,dt);
-   r.head.rotation.x=damp(r.head.rotation.x,-lean+(b.waiting?b.waitPitch:b.pitch*.25),18,dt);r.chest.rotation.x=-b.pitch*.25+(b.hit>0?Math.sin(b.hit*30)*.07:0);
+   r.chest.rotation.y=damp(r.chest.rotation.y,twist*.65,15,dt);r.neck.rotation.y=damp(r.neck.rotation.y,clamp(angleDelta(r.bodyYaw+r.abdomen.rotation.y+r.chest.rotation.y,b.target?Math.atan2(p.x-b.target.body.x,p.z-b.target.body.z):b.waiting?b.waitHeadYaw:b.yaw),b.waiting?-.85:-.5,b.waiting?.85:.5),21,dt);
+   r.head.rotation.x=damp(r.head.rotation.x,-lean+(b.waiting?b.waitPitch:b.pitch*(b.target?.human ? .85 : .38)),18,dt);r.chest.rotation.x=-b.pitch*.25+(b.hit>0?Math.sin(b.hit*30)*.07:0);
    pelvisInverse.copy(r.pelvis.quaternion).invert();
    for(let i=0;i<2;i++){const l=r.legs[i],cycle=((r.phase/(Math.PI*2)+i*.5)%1+1)%1,duty=.58,swing=clamp((cycle-duty)/(1-duty),0,1),stride=cycle<duty?reach*(1-2*cycle/duty):-reach*Math.cos(swing*Math.PI),lift=Math.sin(swing*Math.PI)*(.08+Math.min(.13,r.speed*.012))*r.moving;
     // Sample only near a footfall, staggered between legs; visual interpolation stays per frame.
@@ -115,15 +115,15 @@ export class SoldierBatch{
     if(!fighting&&!reload&&!knife){target.y+=Math.sin(r.phase+(left?Math.PI:0))*.025;target.z+=s>9?.06:0;}this.armIK(arm,target);if(knife)arm.wrist.rotation.set(.1,0,left?-.1:.1);else arm.wrist.quaternion.copy(q.copy(arm.shoulder.quaternion).multiply(arm.elbow.quaternion).invert()).multiply(r.gun.quaternion);
    }
    if(knife){if(r.gun.parent!==r.arms[1].hand)r.arms[1].hand.add(r.gun);r.gun.position.set(0,-.06,0);r.gun.rotation.set(-1.3,0,0);}else if(r.gun.parent!==r.chest)r.chest.add(r.gun);
-   if(b.atomicDown){r.root.rotation.z=0;r.root.rotation.x=-Math.PI*.48;r.root.position.y=y+.17;r.pelvis.position.y=.85;r.abdomen.rotation.x=0;r.chest.rotation.x=.03;r.head.rotation.x=.12;for(const l of r.legs){l.hip.rotation.x=.10;l.hip.rotation.z=l.side*.13;l.knee.rotation.x=-.25;l.ankle.rotation.x=.15;}for(const arm of r.arms){arm.shoulder.rotation.set(.45,0,arm.side*.48);arm.elbow.rotation.set(-.55,0,0);}}else r.root.rotation.x=0;
+   if(b.atomicDown){r.root.rotation.z=0;r.root.rotation.x=.10;r.root.position.y=y;r.pelvis.position.y=.53;r.abdomen.rotation.x=.20;r.chest.rotation.x=.03;r.head.rotation.x=.12;for(const l of r.legs){l.hip.rotation.x=.88;l.hip.rotation.z=l.side*.13;l.knee.rotation.x=-1.60;l.ankle.rotation.x=.15;}for(const arm of r.arms){arm.shoulder.rotation.set(.45,0,arm.side*.48);arm.elbow.rotation.set(-.55,0,0);}}else r.root.rotation.x=0;
    r.root.updateMatrixWorld(true);
    const variant=this.ranged[b.arsenal.selected-3];
-   if(variant&&!b.atomicDown&&(b.alive||time-b.deathTime<=2.7)&&!b.held&&!b.throwAction&&time-b.antidoteAt>=.6){
+   if(variant&&!b.atomicDown&&b.alive&&!b.held&&!b.throwAction&&time-b.antidoteAt>=.6){
     variant.setMatrixAt(variant.count++,r.gun.matrixWorld);
    }
   }
   for(const mesh of this.ranged){mesh.visible=mesh.count>0;if(mesh.visible)mesh.instanceMatrix.needsUpdate=true;}
-  for(const batch of this.batches){batch.mesh.count=showPlayer?batch.parts.length:batch.botCount;for(let i=0;i<batch.mesh.count;i++){const p=batch.parts[i];const b=p.bot,hidden=(!b.atomicDown&&!b.alive&&time-b.deathTime>2.7)||(p.weapon!==null&&(b.atomicDown||p.weapon!==b.arsenal.selected||b.held||b.throwAction||time-b.antidoteAt<.6));if(hidden)matrix.makeScale(0,0,0);else matrix.copy(p.bone.matrixWorld);batch.mesh.setMatrixAt(p.index,matrix);const flash=b.hit>0?2:time<b.spawnUntil?1:0;if(p.flash!==flash){p.flash=flash;color.setHex(p.color);if(flash)color.lerp(flashColor,flash===2?.65:.28);batch.mesh.setColorAt(p.index,color);batch.mesh.instanceColor.needsUpdate=true;}}batch.mesh.instanceMatrix.needsUpdate=true;}
+  for(const batch of this.batches){batch.mesh.count=showPlayer?batch.parts.length:batch.botCount;for(let i=0;i<batch.mesh.count;i++){const p=batch.parts[i];const b=p.bot,hidden=!b.alive||(p.weapon!==null&&(b.atomicDown||p.weapon!==b.arsenal.selected||b.held||b.throwAction||time-b.antidoteAt<.6));if(hidden)matrix.makeScale(0,0,0);else matrix.copy(p.bone.matrixWorld);batch.mesh.setMatrixAt(p.index,matrix);const flash=b.hit>0?2:time<b.spawnUntil?1:0;if(p.flash!==flash){p.flash=flash;color.setHex(p.color);if(flash)color.lerp(flash===2?hitColor:flashColor,flash===2?.83:.28);batch.mesh.setColorAt(p.index,color);batch.mesh.instanceColor.needsUpdate=true;}}batch.mesh.instanceMatrix.needsUpdate=true;}
  }
  dispose(){for(const mesh of this.ranged){mesh.removeFromParent();mesh.geometry.dispose();mesh.dispose();}this.rangedMaterial?.dispose();for(const b of this.batches){this.scene.remove(b.mesh);b.mesh.dispose();}this.boxGeometry.dispose();if(this.ownsAppearance){this.geometry.dispose();this.material.dispose();this.ledMaterial.dispose();this.visorAtlas.dispose();}}
 }

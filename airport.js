@@ -1,5 +1,6 @@
 // AERÓDROMO 12 — compact 128 × 104 m terminal, apron and cargo compound.
 // Original authored geometry. Airport planning references are listed in the patch notes.
+import {mapProps} from './reactive-props.js';
 import {rectPoly,makeCollider} from './physics.js';
 export function createAirport(){
  const solids=[],visuals=[],labels=[],targets=[],zones=[];
@@ -121,5 +122,5 @@ export function createAirport(){
  ceiling(-49,2.78,-15,10);ceiling(8,6.62,-35,19);ceiling(23,6.62,-35,19);
  for(const [x,z]of [[-26,38],[-24,-32],[58,-40],[57,-2],[57,44],[16,44],[20,-17],[20,12],[-4,22]]){box('lamp post',x,4,z,.16,8,.16,'dark');box('lamp arm',x+.65,8,z,1.5,.14,.14,'steel');ceiling(x+1.2,7.9,z,23);}
  const zone=(name,x,z,w,d)=>zones.push({name,x,z,w,d});zone('01 · TERMINAL',-42,0,26,66);zone('02 · HANGAR',14,-35,34,26);zone('03 · CARGA',47,-12,28,60);zone('04 · TORRE',-16,34,16,27);zone('05 · PLATAFORMA',18,12,72,77);zone('06 · ACCESO',-42,42,33,18);
- return{id:'airport',name:'AERÓDROMO 12',width:128,depth:104,bounds:{minX:-62,maxX:62,minZ:-50,maxZ:50},solids,visuals,labels,targets,zones,lamps,shadows:[[-42,0,24,66],[14,-35,32,24],[-16,37,10,8]],spawn:{x:-42,y:0,z:41,yaw:0},bases:{blue:[-42,42],red:[45,-43]},spawnAnchors:{blue:[[-42,42],[-55,27],[-26,45]],red:[[45,-43],[57,-35],[33,-48]]},crateSpots:[[-50,0,38],[-39,0,27],[-37,0,-24],[-49,3.2,-23],[22,0,-40],[38,0,-25],[57,0,14],[23,0,39],[-18,3,38]],objectiveZones:[[-40,19],[-40,-21],[15,-32],[29,21]],navLinks:[]};
+ return{reactiveSites:mapProps('airport',solids),id:'airport',name:'AERÓDROMO 12',width:128,depth:104,bounds:{minX:-62,maxX:62,minZ:-50,maxZ:50},solids,visuals,labels,targets,zones,lamps,shadows:[[-42,0,24,66],[14,-35,32,24],[-16,37,10,8]],spawn:{x:-42,y:0,z:41,yaw:0},bases:{blue:[-42,42],red:[45,-43]},spawnAnchors:{blue:[[-42,42],[-55,27],[-26,45]],red:[[45,-43],[57,-35],[33,-48]]},crateSpots:[[-50,0,38],[-39,0,27],[-37,0,-24],[-49,3.2,-23],[22,0,-40],[38,0,-25],[57,0,14],[23,0,39],[-18,3,38]],objectiveZones:[[-40,19],[-40,-21],[15,-32],[29,21]],navLinks:[]};
 }

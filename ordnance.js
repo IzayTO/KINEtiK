@@ -58,7 +58,7 @@ export class Ordnance{
  for(const a of m.actors){const action=a.throwAction;if(action){if(!a.alive){a.throwAction=null;a.held=null;}else{if(!action.released&&time>=action.release)this.release(a,action);if(time>=action.end){a.throwAction=null;if(!a.equipment[action.kind]||!a.human){a.held=null;a.arsenal.select(1);}}}}
  }
  for(const p of this.projectiles){if(!p.active)continue;p.previous.x=p.x;p.previous.y=p.y;p.previous.z=p.z;
-  if(p.kind==='rocket'){const v=Math.hypot(p.vx,p.vy,p.vz),ray={x:p.vx/v,y:p.vy/v,z:p.vz/v},target=m.lineTarget(p.owner,p,ray,v*dt);if(target.actor){Object.assign(p,target.point);this.createArea(p);p.active=false;continue;}}
+  if(p.kind==='rocket'){const v=Math.hypot(p.vx,p.vy,p.vz),ray={x:p.vx/v,y:p.vy/v,z:p.vz/v},target=m.lineTarget(p.owner,p,ray,v*dt);if(target.actor||target.prop){if(target.prop)m.reactive.ignite(target.prop,p.owner);Object.assign(p,target.point);this.createArea(p);p.active=false;continue;}}
   const hit=advanceProjectile(m.world,p,dt,p.kind==='rocket'?0:m.params.gravity);if(hit){this.createArea(p);p.active=false;continue;}
   if(time-p.born>(p.kind==='rocket'?8:THROW_LIFETIME)||p.y< -4){p.active=false;}
  }

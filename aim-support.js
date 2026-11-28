@@ -15,7 +15,7 @@ export class AimSupport{
   const error=Math.hypot(angleDelta(yaw,ty),tp-pitch);
   const bodyRadius=Math.atan2(.48,d);
   const radius=scoped?Math.min(p.assistRadius*DEG,bodyRadius):Math.max(p.assistRadius*DEG,Math.min(18*DEG,bodyRadius));
-  if(error>radius||obstruction(m.world.colliders,origin,point)<.999)return null;
+  if(error>radius||m.reactive.blocksSight(origin,point)||obstruction(m.world.colliders,origin,point)<.999)return null;
   return{id:actor.id,yaw:ty,pitch:tp,distance:d,visible:true,error,radius};
  }
  track(dt,origin,yaw,pitch,ads,allowed){const m=this.match,p=this.preferences;if(!ads||!allowed||!p.assist||p.assistStrength<=0||!m.player.alive||m.player.consuming||m.player.opening||(p.assistTracking===false&&m.time-this.manualAt>.28)){this.target=null;this.scanAt=0;return[yaw,pitch];}
@@ -31,7 +31,7 @@ export class AimSupport{
  }
  autoTarget(origin,direction,ads){const m=this.match,a=m.player;if(!this.preferences.autoFire||!ads||!a.alive||a.arsenal.selected===0||a.arsenal.reload||a.consuming||a.opening||a.arsenal.time<a.arsenal.switchUntil){this.fireId=null;return null;}
   const hit=m.lineTarget(a,origin,direction,a.arsenal.weapon.range??110),b=hit?.actor;
-  if(!b||!m.enemy(a,b)||!b.alive||m.time<b.spawnUntil){this.fireId=null;return null;}
+  if(!b||m.reactive.blocksSight(origin,hit.point)||!m.enemy(a,b)||!b.alive||m.time<b.spawnUntil){this.fireId=null;return null;}
   if(this.fireId!==b.id){this.fireId=b.id;this.fireSince=m.time;}
   // No extra reaction timer: the actual ray and the weapon cadence are authoritative.
   return b;

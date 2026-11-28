@@ -235,7 +235,7 @@ export class WorldView {
   }
   render(){
     this.renderer.info.reset();this.renderer.info.autoReset=false;
-    this.renderer.clear();this.renderer.render(this.scene,this.camera);if(!this.scoped){this.renderer.clearDepth();this.renderer.render(this.gunScene,this.gunCamera);}
+    this.renderer.clear();this.renderer.render(this.scene,this.camera);if(!this.scoped||this.cantedScope){this.renderer.clearDepth();this.renderer.render(this.gunScene,this.gunCamera);}
     this.stats.calls=this.renderer.info.render.calls;this.stats.triangles=this.renderer.info.render.triangles;
   }
 }
