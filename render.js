@@ -164,8 +164,14 @@ export class WorldView {
       }
       box(wrist,0.035,0.045,0.07,side*0.06,0.02,-0.005,glove).rotation.z=side*0.6;
       if(side===-1){fore.position.set(-0.22,-0.18,-0.12);fore.rotation.set(-0.4,-0.6,0);}
+      const restEnd=new THREE.Vector3(0,0,.23).applyQuaternion(fore.quaternion).add(fore.position);
+      fore.geometry.dispose();fore.geometry=new THREE.BoxGeometry(.11,1,.105);
+      arm.userData={sleeve:fore,wrist,side,restEnd};
+      const start=wrist.position.clone();start.z+=.057;
+      fore.position.lerpVectors(start,restEnd,.5);fore.scale.y=start.distanceTo(restEnd);
+      fore.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),restEnd.clone().sub(start).normalize());
     }
-    batchChildren(this.weapon,[this.flash]);for(const arm of this.arms)batchChildren(arm);
+    batchChildren(this.weapon,[this.flash]);for(const arm of this.arms)batchChildren(arm,[arm.userData.sleeve]);
   }
   buildEffects(){
     this.impacts=[];const geo=new THREE.IcosahedronGeometry(0.045,0);
@@ -236,6 +242,11 @@ export class WorldView {
   render(){
     this.renderer.info.reset();this.renderer.info.autoReset=false;
     this.renderer.clear();this.renderer.render(this.scene,this.camera);if(!this.scoped||this.cantedScope){this.renderer.clearDepth();this.renderer.render(this.gunScene,this.gunCamera);}
+    else if(this.weaponFX?.hand.visible){
+      const mask=this.gunCamera.layers.mask;
+      this.gunCamera.layers.set(3);this.renderer.clearDepth();this.renderer.render(this.gunScene,this.gunCamera);
+      this.gunCamera.layers.mask=mask;
+    }
     this.stats.calls=this.renderer.info.render.calls;this.stats.triangles=this.renderer.info.render.triangles;
   }
 }

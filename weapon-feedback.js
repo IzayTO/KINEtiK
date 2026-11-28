@@ -1,28 +1,20 @@
 import * as T from './three.module.min.js';
 import {clamp} from './physics.js';
-import {PropParts} from './prop-geometry.js';
+import {makeFlareFactory,igniteFlare,animateFlare} from './muzzle-flare.js';
+import {segment} from './weapon-models.js';
 
 const remoteBarrels={rifle:[-.49,.015,.019,.19],shotgun:[-.49,.015,.019,.19],pistol:[-.183,.015,.026,.042],sniper:[-.56,.014,.025,.24],rocket:[-.648,0,.128,.061]};
 const pose=new T.Object3D(),matrix=new T.Matrix4(),mount=new T.Matrix4(),hotColor=new T.Color();
 const launcherPose=new T.Matrix4().makeRotationX(.3).setPosition(0,-.015,0);
 const forward=new T.Vector3(0,0,-1),axis=new T.Vector3(0,0,1),turn=new T.Quaternion();
 const local=new T.Vector3(),world=new T.Vector3(),direction=new T.Vector3();
+const tilt=new T.Euler(),anchor=new T.Vector3(),start=new T.Vector3(),end=new T.Vector3();
 const specs={
  // Muzzle tip, visible barrel center, sleeve radius / length and heat per shot.
  rifle:[-.916,.025,-.759,.0244,.14,.16],shotgun:[-.925,.028,-.793,.0324,.14,.31],
  pistol:[-.271,.043,-.257,.0243,.024,.19],sniper:[-1.18,.028,-.94,.0254,.26,.43],
  rocket:[-.823,0,-.647,.128,.063,.57]
 };
-function flameShape(){
- const art=new PropParts();
- for(let i=0;i<9;i++){
-  const a=i*2.39996,r=i===0?0:.105+(i%3)*.031;
-  const x=Math.cos(a),y=Math.sin(a),w=.024;
-  const tip=[x*r,y*r,-(i===0?.30:.07+(i%4)*.035)];
-  art.facet([[x*w-y*w,y*w+x*w,0],[x*w+y*w,y*w-x*w,0],tip],i%2?0xffbc44:0xff8823);
- }
- art.add(new T.OctahedronGeometry(1),0xfff7d9,[0,0,-.062],[0,0,0],[.038,.039,.14]);return art.finish();
-}
 function patchTexture(){
  const n=32,px=new Uint8Array(n*n*4);for(let j=0;j<n*n;j++){
   const d=Math.hypot(j%n-15.5,Math.floor(j/n)-15.5)/16;
@@ -39,9 +31,9 @@ export function inspectPose(t){
 }
 export class WeaponFeedback{
  constructor(view){
-  this.view=view;this.shape=flameShape();this.mat=new T.MeshBasicMaterial({vertexColors:true,side:T.DoubleSide,depthWrite:false});
-  const burst=scene=>{const b=new T.Mesh(this.shape,this.mat);b.visible=false;scene.add(b);return b;};
-  this.hand=burst(view.gunScene);this.others=Array.from({length:6},()=>({mesh:burst(view.scene),end:0}));
+  this.view=view;const burst=makeFlareFactory();
+  this.hand=burst(view.gunScene);this.hand.layers.enable(3);
+  this.others=Array.from({length:6},()=>burst(view.scene));
   this.light=new T.PointLight(0xffb660,0,3.35,1.25);view.scene.add(this.light);
   this.handLight=new T.PointLight(0xffb05a,0,2.4,1);view.gunScene.add(this.handLight);
   const tex=patchTexture();this.patch=new T.Mesh(new T.PlaneGeometry(1,1),new T.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2}));
@@ -56,7 +48,7 @@ export class WeaponFeedback{
   this.heat={rifle:0,shotgun:0,pistol:0,sniper:0,rocket:0};this.inspectKind=null;this.shotKind=null;
   this.hand.visible=this.patch.visible=this.sleeve.visible=false;this.handLight.intensity=this.light.intensity=0;
   this.handEnd=this.lightEnd=this.patchEnd=-1;this.lightDistance=Infinity;this.next=0;this.cant=0;
-  for(const o of this.others){o.mesh.visible=false;o.end=-1;}
+  for(const mesh of [this.hand,...this.others]){mesh.visible=false;mesh.userData.born=-Infinity;}
  }
  item(){
   const a=this.view.match?.player;if(!a)return null;
@@ -71,17 +63,58 @@ export class WeaponFeedback{
   const kind=this.item(),usingField=!!a.held||!!a.throwAction,rig=usingField?v.field.hand:v.rig;
   this.cant+=(Number(!!v.preferences?.cantedADS)-this.cant)*(1-Math.exp(-14*dt));
   v.cantedScope=v.scoped&&this.cant>.01;
-  if(specs[kind]&&this.cant&&v.aim){
-   cantPivot(rig,.68*this.cant*v.aim);
-   if(v.cantedScope){rig.position.x+=.24*this.cant;rig.position.y-=.16*this.cant;}
+  const lean=specs[kind]?this.cant*v.aim:0;
+  if(lean){
+   // Turn around the rear aperture so opening the receiver toward the eye keeps the reticle centered.
+   const rear=usingField?null:v.models[a.arsenal.selected].rear;
+   if(rear)local.copy(rear.position);else local.set(0,.246,-.65);
+   world.copy(local).applyQuaternion(rig.quaternion).add(rig.position);
+   turn.setFromEuler(tilt.set(-.032*lean,.084*lean,0,'YXZ'));
+   rig.quaternion.premultiply(turn);
+   rig.position.copy(world).sub(local.applyQuaternion(rig.quaternion));
+   cantPivot(rig,-.68*lean);
+   if(v.cantedScope){rig.position.x-=.16*lean;rig.position.y-=.12*lean;}
   }
   if(!a.alive||a.arsenal.reload||a.arsenal.attack||a.consuming||a.opening||a.throwAction||m.remote.engaged||m.nuclear.restricted||input.fire||input.aim||this.inspectKind!==kind)this.inspectKind=null;
+  let w=0;
   if(this.inspectKind){
-   const age=v.time-this.inspectAt,w=inspectPose(age);if(age>=1.65)this.inspectKind=null;
+   const age=v.time-this.inspectAt;w=inspectPose(age);if(age>=1.65)this.inspectKind=null;
    rig.position.x+=w*.10;rig.position.y+=w*.095;rig.position.z-=w*.095;
    rig.rotation.x+=w*.11;rig.rotation.y+=w*.76;rig.rotation.z-=w*.32;
   }
   rig.updateMatrixWorld(true);
+  if(!usingField&&specs[kind])this.fitSleeves(w);
+  else if(kind==='knife'&&!usingField){
+   const model=v.models[0],s=model.support,weight=Math.min(1,Math.abs(w));
+   end.copy(s.end);
+   if(weight)end.lerp(s.group.worldToLocal(anchor.set(-.23,-.39,-.095)),weight);
+   segment(s.arm,s.start,end);
+   if(weight){
+    const upper=model.upper;
+    start.set(0,-.5,0).applyMatrix4(upper.matrix);
+    end.set(0,.5,0).applyMatrix4(upper.matrix).lerp(model.root.worldToLocal(anchor.set(.23,-.39,-.095)),weight);
+    segment(upper,start,end);
+   }
+  }
+  else if(w&&usingField){
+   const field=v.field;
+   end.copy(field.shoulderPoint).lerp(rig.worldToLocal(anchor.set(.24,-.36,-.08)),Math.min(1,Math.abs(w)));
+   segment(field.upper,field.elbowPoint,end);
+  }
+ }
+ fitSleeves(inspect){
+  const v=this.view;
+  for(const arm of v.arms){
+   const {sleeve,wrist,side,restEnd}=arm.userData;
+   start.copy(wrist.position);start.z+=.057;
+   end.copy(restEnd);
+   if(inspect){
+    // Keep the shoulder below the frame as the hand follows the rotating fore-end.
+    arm.worldToLocal(anchor.set(side*.23,-.39,-.095));
+    end.lerp(anchor,Math.min(1,Math.abs(inspect)*1.45));
+   }
+   segment(sleeve,start,end);
+  }
  }
  origin(kind){
   const v=this.view,field=kind==='rocket',root=field?v.field.handItems.rocket:v.models.find(m=>m.kind===kind)?.root;
@@ -99,7 +132,7 @@ export class WeaponFeedback{
    local.set(0,spec[1],spec[0]);root.localToWorld(local);
    world.copy(local).applyQuaternion(v.camera.quaternion).add(v.camera.position);
    this.handLight.position.copy(local);this.handLight.position.z+=.17;
-   this.placeHand(root,local,1);
+   igniteFlare(this.hand,kind,v.time);this.placeHand(root,local);
   }else{
    const o=this.others[this.next++%this.others.length],a=rig.bot;
    let temperatures=this.hotActors.get(a.id);if(!temperatures){temperatures={};this.hotActors.set(a.id,temperatures);}
@@ -108,8 +141,7 @@ export class WeaponFeedback{
    direction.set(-Math.sin(a.gunYaw)*Math.cos(a.pitch),Math.sin(a.pitch),-Math.cos(a.gunYaw)*Math.cos(a.pitch));
    rig.gun.getWorldPosition(world);world.addScaledVector(direction,kind==='pistol'?.21:kind==='sniper'?.79:.63);
    if(kind==='rocket'){mount.multiplyMatrices(rig.arms[1].wrist.matrixWorld,launcherPose);world.set(0,0,spec[0]).applyMatrix4(mount);}
-   o.mesh.position.copy(world);o.mesh.quaternion.setFromUnitVectors(forward,direction);o.mesh.rotateZ(Math.random()*6.28);
-   o.mesh.scale.setScalar(strength);o.mesh.visible=true;o.end=v.time+.085;
+   igniteFlare(o,kind,v.time);o.position.copy(world);o.quaternion.setFromUnitVectors(forward,direction);o.rotateZ(o.userData.roll);
   }
   const distance=world.distanceToSquared(v.camera.position);
   if(isLocal||v.time>=this.lightEnd||distance<this.lightDistance){
@@ -117,9 +149,8 @@ export class WeaponFeedback{
   }
   if(isLocal)this.handLight.intensity=1.5*strength;
  }
- placeHand(root,at,k){
-  const b=this.hand;b.position.copy(at);root.getWorldQuaternion(b.quaternion);b.rotateZ(this.handEnd*37);
-  b.scale.setScalar(this.strength*(.55+.45*k));b.visible=k>0;
+ placeHand(root,at){
+  const b=this.hand;b.position.copy(at);root.getWorldQuaternion(b.quaternion);b.rotateZ(b.userData.roll);
  }
  trace(e){
   if(!e.impact||e.bodyHit||!this.view.environment.night)return;
@@ -163,10 +194,12 @@ export class WeaponFeedback{
   const root=s?this.origin(kind):null,visible=root&&v.match?.player.alive&&!v.match.remote.engaged&&!v.match.nuclear.restricted&&root.visible;
   let k=clamp((this.handEnd-v.time)/.085,0,1);
   if(!visible||kind!==this.shotKind)k=0;
-  this.hand.visible=!!k;this.handLight.intensity=k*k*1.5*(this.strength||1);
-  if(k){local.set(0,s[1],s[0]);root.localToWorld(local);this.placeHand(root,local,k);this.handLight.position.copy(local);this.handLight.position.z+=.17;}
+  if(v.flash)v.flash.visible=false;
+  animateFlare(this.hand,v.time);this.hand.visible=this.hand.visible&&!!visible&&kind===this.shotKind;
+  this.handLight.intensity=k*k*1.5*(this.strength||1);
+  if(this.hand.visible){local.set(0,s[1],s[0]);root.localToWorld(local);this.placeHand(root,local);this.handLight.position.copy(local);this.handLight.position.z+=.17;}
   this.light.intensity=5.8*clamp((this.lightEnd-v.time)/.09,0,1)**2;
-  for(const o of this.others)if(o.mesh.visible&&v.time>=o.end)o.mesh.visible=false;
+  for(const mesh of this.others)if(mesh.visible)animateFlare(mesh,v.time);
   this.patch.visible=v.time<this.patchEnd;if(this.patch.visible)this.patch.material.opacity=this.patchStrength*clamp((this.patchEnd-v.time)/.08,0,1);
   this.sleeve.visible=!!visible&&heat>.012;
   if(this.sleeve.visible){local.set(0,s[1],s[2]);root.localToWorld(local);this.sleeve.position.copy(local);root.getWorldQuaternion(this.sleeve.quaternion);

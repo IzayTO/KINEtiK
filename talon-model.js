@@ -120,11 +120,11 @@ function freeHand(material) {
   const start=new T.Vector3(-.004,-.007,.051),end=new T.Vector3(-.20,-.19,.34);
   arm.position.lerpVectors(start,end,.5);
   arm.scale.y=start.distanceTo(end);
-  arm.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),end.sub(start).normalize());
+  arm.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),end.clone().sub(start).normalize());
   group.add(arm);
   group.position.set(-.39,-.047,-.014);
   group.rotation.z=-.13;
-  return group;
+  return {group,arm,start,end};
 }
 
 export function buildTalon() {
@@ -138,7 +138,7 @@ export function buildTalon() {
   bladeTip.position.set(0,.121,-.327);
   item.add(bladeTip);
   wrist.add(item,new T.Mesh(gripGloveGeometry(),fabric));
-  const fore=sleeve(fabric),upper=sleeve(fabric,true),leftHand=freeHand(fabric);
+  const fore=sleeve(fabric),upper=sleeve(fabric,true),support=freeHand(fabric),leftHand=support.group;
   root.add(wrist,fore,upper,leftHand);
-  return {kind:'knife',root,wrist,fore,upper,bladeTip,item,leftHand,muzzle:new T.Object3D(),flash:null};
+  return {kind:'knife',root,wrist,fore,upper,bladeTip,item,leftHand,support,muzzle:new T.Object3D(),flash:null};
 }

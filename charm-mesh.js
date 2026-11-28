@@ -141,7 +141,7 @@ export class CharmBatch{
   const [x,y,z,size,yaw,drop]=mount,o=this.local;
   o.position.set(x,y,z+slideZ);o.scale.setScalar(size);o.rotation.set(swing*.45,yaw*(1-.58*cant)+twist,swing,'YXZ');
   // The socket rolls with the weapon. Gravity keeps the hanging LEDs underneath it.
-  if(cant)o.quaternion.premultiply(hang.setFromAxisAngle(rollAxis,-.68*cant));
+  if(cant)o.quaternion.premultiply(hang.setFromAxisAngle(rollAxis,.68*cant));
   o.updateMatrix();
   const i=this.used++;this.matrix.multiplyMatrices(base,o.matrix);this.mesh.setMatrixAt(i,this.matrix);
   this.tiles.setXYZ(i,indices.get(kind)*COLS,id*ROWS,drop);
