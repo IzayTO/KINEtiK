@@ -3,7 +3,9 @@ import {clamp} from './physics.js';
 import {makeFlareFactory,igniteFlare,animateFlare} from './muzzle-flare.js';
 import {segment} from './weapon-models.js';
 
-const remoteBarrels={rifle:[-.49,.015,.019,.19],shotgun:[-.49,.015,.019,.19],pistol:[-.183,.015,.026,.042],sniper:[-.56,.014,.025,.24],rocket:[-.648,0,.128,.061]};
+const coolingSeconds=4.5;
+const cool=(heat,seconds)=>Math.max(0,heat-seconds/coolingSeconds);
+const remoteBarrels={rifle:[-.487,.015,.021,.30],shotgun:[-.49,.015,.019,.19],pistol:[-.183,.015,.026,.042],sniper:[-.56,.014,.025,.24],rocket:[-.648,0,.128,.061]};
 const pose=new T.Object3D(),matrix=new T.Matrix4(),mount=new T.Matrix4(),hotColor=new T.Color();
 const launcherPose=new T.Matrix4().makeRotationX(.3).setPosition(0,-.015,0);
 const forward=new T.Vector3(0,0,-1),axis=new T.Vector3(0,0,1),turn=new T.Quaternion();
@@ -31,8 +33,8 @@ export function inspectPose(t){
 }
 export class WeaponFeedback{
  constructor(view){
-  this.view=view;const burst=makeFlareFactory();
-  this.hand=burst(view.gunScene);this.hand.layers.enable(3);
+  this.view=view;this.rifleMetal=view.models[1].barrel.material;const burst=makeFlareFactory();
+  this.hand=burst(view.gunScene);this.hand.traverse(part=>part.layers.enable(3));
   this.others=Array.from({length:6},()=>burst(view.scene));
   this.light=new T.PointLight(0xffb660,0,3.35,1.25);view.scene.add(this.light);
   this.handLight=new T.PointLight(0xffb05a,0,2.4,1);view.gunScene.add(this.handLight);
@@ -45,6 +47,7 @@ export class WeaponFeedback{
  }
  reset(){
   this.hotActors=new Map();this.hotBarrels.count=0;
+  this.rifleMetal.emissiveIntensity=0;this.rifleMetal.color.setRGB(1,1,1);
   this.heat={rifle:0,shotgun:0,pistol:0,sniper:0,rocket:0};this.inspectKind=null;this.shotKind=null;
   this.hand.visible=this.patch.visible=this.sleeve.visible=false;this.handLight.intensity=this.light.intensity=0;
   this.handEnd=this.lightEnd=this.patchEnd=-1;this.lightDistance=Infinity;this.next=0;this.cant=0;
@@ -61,19 +64,22 @@ export class WeaponFeedback{
  pose(dt,input){
   const v=this.view,m=v.match,a=m?.player;if(!a)return;
   const kind=this.item(),usingField=!!a.held||!!a.throwAction,rig=usingField?v.field.hand:v.rig;
-  this.cant+=(Number(!!v.preferences?.cantedADS)-this.cant)*(1-Math.exp(-14*dt));
-  v.cantedScope=v.scoped&&this.cant>.01;
+  const posture=v.preferences?.cantedADS;
+  const target=posture==='left'?1:posture==='right'?-1:0;
+  this.cant+=(target-this.cant)*(1-Math.exp(-14*dt));
+  if(Math.abs(target-this.cant)<.0001)this.cant=target;
+  v.cantedScope=v.scoped&&Math.abs(this.cant)>.01;
   const lean=specs[kind]?this.cant*v.aim:0;
   if(lean){
    // Turn around the rear aperture so opening the receiver toward the eye keeps the reticle centered.
    const rear=usingField?null:v.models[a.arsenal.selected].rear;
    if(rear)local.copy(rear.position);else local.set(0,.246,-.65);
    world.copy(local).applyQuaternion(rig.quaternion).add(rig.position);
-   turn.setFromEuler(tilt.set(-.032*lean,.084*lean,0,'YXZ'));
+   turn.setFromEuler(tilt.set(-.032*Math.abs(lean),.084*lean,0,'YXZ'));
    rig.quaternion.premultiply(turn);
    rig.position.copy(world).sub(local.applyQuaternion(rig.quaternion));
    cantPivot(rig,-.68*lean);
-   if(v.cantedScope){rig.position.x-=.16*lean;rig.position.y-=.12*lean;}
+   if(v.cantedScope){rig.position.x-=.16*lean;rig.position.y-=.12*Math.abs(lean);}
   }
   if(!a.alive||a.arsenal.reload||a.arsenal.attack||a.consuming||a.opening||a.throwAction||m.remote.engaged||m.nuclear.restricted||input.fire||input.aim||this.inspectKind!==kind)this.inspectKind=null;
   let w=0;
@@ -136,7 +142,7 @@ export class WeaponFeedback{
   }else{
    const o=this.others[this.next++%this.others.length],a=rig.bot;
    let temperatures=this.hotActors.get(a.id);if(!temperatures){temperatures={};this.hotActors.set(a.id,temperatures);}
-   const prev=temperatures[kind],heat=prev?Math.max(0,prev.value-(v.time-prev.at)*.106):0;
+   const prev=temperatures[kind],heat=prev?cool(prev.value,v.time-prev.at):0;
    temperatures[kind]={value:Math.min(1,heat+spec[5]),at:v.time};
    direction.set(-Math.sin(a.gunYaw)*Math.cos(a.pitch),Math.sin(a.pitch),-Math.cos(a.gunYaw)*Math.cos(a.pitch));
    rig.gun.getWorldPosition(world);world.addScaledVector(direction,kind==='pistol'?.21:kind==='sniper'?.79:.63);
@@ -178,7 +184,7 @@ export class WeaponFeedback{
   for(const r of v.soldiers?.rigs||[]){const a=r.bot,temps=this.hotActors.get(a.id);
    if(!temps||!a.alive||a.atomicDown||r.root.position.distanceToSquared(v.camera.position)>45*45)continue;
    const kind=a.throwAction?.kind||a.held||a.arsenal.weapon.id,entry=temps[kind];if(!entry)continue;
-   const heat=entry.value-(v.time-entry.at)*.106;if(heat<=.055)continue;
+   const heat=cool(entry.value,v.time-entry.at);if(heat<=0)continue;
    const [z,y,radius,length]=remoteBarrels[kind];
    pose.position.set(0,y,z);pose.rotation.set(Math.PI/2,0,0);pose.scale.set(radius,length,radius);pose.updateMatrix();
    if(kind==='rocket')mount.multiplyMatrices(r.arms[1].wrist.matrixWorld,launcherPose);else mount.copy(r.gun.matrixWorld);
@@ -189,7 +195,7 @@ export class WeaponFeedback{
  }
  update(dt,input){
   const v=this.view;this.pose(dt,input);this.worldHeat();
-  for(const k in this.heat)this.heat[k]=Math.max(0,this.heat[k]-dt*.106);
+  for(const k in this.heat)this.heat[k]=cool(this.heat[k],dt);
   const kind=this.item(),s=specs[kind],heat=this.heat[kind]||0;
   const root=s?this.origin(kind):null,visible=root&&v.match?.player.alive&&!v.match.remote.engaged&&!v.match.nuclear.restricted&&root.visible;
   let k=clamp((this.handEnd-v.time)/.085,0,1);
@@ -201,7 +207,10 @@ export class WeaponFeedback{
   this.light.intensity=5.8*clamp((this.lightEnd-v.time)/.09,0,1)**2;
   for(const mesh of this.others)if(mesh.visible)animateFlare(mesh,v.time);
   this.patch.visible=v.time<this.patchEnd;if(this.patch.visible)this.patch.material.opacity=this.patchStrength*clamp((this.patchEnd-v.time)/.08,0,1);
-  this.sleeve.visible=!!visible&&heat>.012;
+  const rifleHeat=this.heat.rifle;
+  this.rifleMetal.emissiveIntensity=1.20*rifleHeat;
+  this.rifleMetal.color.setRGB(1,1-.82*rifleHeat,1-.88*rifleHeat);
+  this.sleeve.visible=!!visible&&kind!=='rifle'&&heat>0;
   if(this.sleeve.visible){local.set(0,s[1],s[2]);root.localToWorld(local);this.sleeve.position.copy(local);root.getWorldQuaternion(this.sleeve.quaternion);
    this.sleeve.rotateX(Math.PI/2);this.sleeve.scale.set(s[3],s[4],s[3]);
    this.sleeve.material.color.setRGB(.43+.57*heat,.009+.16*heat**3,.003);this.sleeve.material.opacity=heat*.91;}

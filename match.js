@@ -170,7 +170,7 @@ export class Match{
     // Bursts and deliberate pauses preserve readable combat, especially at range.
     fire=fire&&(b.arsenal.selected!==1||((this.time+b.traits.bias)%(d>22?1.1:.8)<(d>22?.46:.58)));
    }
-   b.arsenal.step(dt,{fireStart:fire&&b.arsenal.selected===3&&b.arsenal.time+dt>=b.arsenal.slots[3].ready,fire:fire&&!b.held&&!b.throwAction&&!b.consuming&&!b.opening},{busy:this.nuclear.restricted||!!b.held||!!b.throwAction||!!b.consuming||!!b.opening,speed:b.body.speed,grounded:b.body.grounded,aim:!!b.target},e=>this.weaponEvent(b,e));
+   b.arsenal.step(dt,{fireStart:fire&&b.arsenal.triggerMode==='semi'&&b.arsenal.time+dt>=b.arsenal.slots[b.arsenal.selected].ready,fire:fire&&!b.held&&!b.throwAction&&!b.consuming&&!b.opening},{busy:this.nuclear.restricted||!!b.held||!!b.throwAction||!!b.consuming||!!b.opening,speed:b.body.speed,grounded:b.body.grounded,aim:!!b.target},e=>this.weaponEvent(b,e));
   }
   this.remote.step(dt);if(this.botRemote.engaged){if(this.nuclear.restricted)this.botRemote.reset();else this.botRemote.step(dt);}this.support.step(dt);if(!this.nuclear.restricted){this.ordnance.step(dt);this.objectives.step(dt);this.supplies.step(dt);}this.blood.step(this.actors,this.time);
   if(!this.nuclear.active&&this.config.mode!=='training'&&((this.config.minutes>0&&this.time>=this.config.minutes*60)||(TEAM_MODES.includes(this.config.mode)?Math.max(this.score.red,this.score.blue):Math.max(...this.actors.map(a=>a.kills)))>=this.objectives.limit()))this.finish();
@@ -192,12 +192,20 @@ export class Match{
  }
  meleeTarget(a){let selected=null,best=Infinity;const p=a.body,o=chest(a);for(const b of this.actors){if(!b.alive||!this.enemy(a,b)||this.time<b.spawnUntil)continue;const d=distance(p,b.body);if(d>2.7+1e-9||Math.abs(p.y-b.body.y)>.95)continue;const t=chest(b);if(obstruction(this.world.colliders,o,t)<.999)continue;const yaw=Math.atan2(-(t.x-o.x),-(t.z-o.z)),rank=d+Math.abs(angleDelta(a.yaw,yaw))*.6;if(rank<best){best=rank;selected=b;}}return selected;}
  fall(a){
-  const variant=Math.floor(Math.random()*3),side=Math.random()<.5?-1:1;
-  const yaw=a.human?a.yaw:a.bodyYaw,dx=variant===1?side*.62:0,dz=variant===0?.75:variant===2?-.52:0;
-  const p=a.body,x=p.x+dx*Math.cos(yaw)+dz*Math.sin(yaw),z=p.z-dx*Math.sin(yaw)+dz*Math.cos(yaw);
+  const variant=Math.floor(Math.random()*4),side=Math.random()<.5?-1:1;
+  const p=a.body,yaw=a.human?a.yaw:a.bodyYaw;
+  // Carry a short, bounded part of the actor's motion through contact.
+  const carry=Math.min(.10,.36/Math.max(1,Math.hypot(p.vx,p.vz)));
+  const driftX=p.vx*carry,driftZ=p.vz*carry;
+  const dx=variant===1?side*.62:variant===3?side*.53:0;
+  const dz=[.75,0,-.52,-.33][variant];
+  const x=p.x+driftX+dx*Math.cos(yaw)+dz*Math.sin(yaw);
+  const z=p.z+driftZ-dx*Math.sin(yaw)+dz*Math.cos(yaw);
   const floor=this.blood.surface(p.x,p.y,p.z,120),base=floor?.y??p.y;
   this.blood.pool(a,this.time,x,z,base);
-  this.events.push({type:'actor-fall',actor:a.id,variant,side,yaw,x:p.x,y:p.y,z:p.z,ground:base,at:this.time});
+  this.events.push({type:'actor-fall',actor:a.id,variant,side,yaw,x:p.x,y:p.y,z:p.z,
+   ground:base,slopeX:floor?.c.slopeX??0,slopeZ:floor?.c.slopeZ??0,
+   driftX,driftZ,vy:p.vy,grounded:p.grounded,gravity:this.params.gravity,at:this.time});
  }
  damage(a,amount,source,weapon=source.arsenal.weapon.id,options={}){if(this.nuclear?.restricted||this.staging||!a.alive||this.time<a.spawnUntil||(!this.enemy(source,a)&&!(options.self&&a===source))||!(amount>0))return null;const shield=options.healthOnly?0:Math.min(a.shield,amount),oldHealth=a.health;a.shield-=shield;a.health=Math.max(options.nonlethal?1:0,a.health-(amount-shield));const health=oldHealth-a.health;if(!(shield+health>0))return null;if(['rifle','shotgun','pistol','sniper'].includes(weapon))this.blood.wound(a,health,this.time);const origin=options.position||source.body;this.events.push({type:'damage',actor:a.id,source:source.id,weapon,shield,health,position:{x:a.body.x,y:a.body.y+a.body.height,z:a.body.z},origin:{x:origin.x,y:origin.y,z:origin.z}});a.hit=.25;a.lastDamage=this.time;this.events.push({type:shield?'shield-hit':'health-hit',actor:a.id,position:copyPos(a.body)});if(!a.human&&!a.target){a.memory={x:origin.x+(a.rng()-.5)*4,y:origin.y,z:origin.z+(a.rng()-.5)*4,expires:this.time+3,id:null};}
   this.awards?.hit(a,source,options.zone);const killed=a.health<=0;if(killed){this.awards?.death(a,source);this.fall(a);a.alive=false;this.objectives.onDeath(a);this.supplies.cancel(a);a.throwAction=null;a.held=null;a.poison=null;a.deaths++;a.deadUntil=this.time+3.2;a.deathTime=this.time;if(source!==a){source.kills++;this.awards?.kill(a,source,weapon,options);this.nuclear?.checkUnlock();if(source.kills%10===0){source.rcCharges++;if(source.human)this.events.push({type:'rc-earned',actor:source.id,count:source.rcCharges});}if(source.kills%20===0){source.airCharges++;if(source.human)this.events.push({type:'airstrike-earned',actor:source.id,count:source.airCharges});}if(!this.objectives.active)this.score[source.team]++;}a.body.vx=a.body.vy=a.body.vz=0;this.events.push({type:'elimination',actor:a.id,killer:source.id,weapon,killerName:source.name,victimName:a.name,killerTeam:source.team,victimTeam:a.team,position:copyPos(a.body)});}

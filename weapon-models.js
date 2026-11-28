@@ -1,8 +1,25 @@
 import * as T from './three.module.min.js';
-import {paneledBody} from './prop-geometry.js';
+import {paneledBody,PropParts} from './prop-geometry.js';
 import {buildTalon} from './talon-model.js';
 // Batch material-compatible fixed components. Movable magazines, pump and joints remain separate.
 function batch(root,exclude=[]){root.updateMatrixWorld(true);const inv=root.matrixWorld.clone().invert(),groups=new Map(),remove=[];root.traverse(o=>{if(!o.isMesh||exclude.includes(o)||exclude.some(e=>e.getObjectById(o.id)))return;const g=o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone();g.applyMatrix4(new T.Matrix4().multiplyMatrices(inv,o.matrixWorld));if(!groups.has(o.material))groups.set(o.material,[]);groups.get(o.material).push(g);remove.push(o);});for(const o of remove)o.removeFromParent();for(const [m,gs]of groups){let size=0;for(const g of gs)size+=g.attributes.position.array.length;const p=new Float32Array(size);let offset=0;for(const g of gs){p.set(g.attributes.position.array,offset);offset+=g.attributes.position.array.length;g.dispose();}const g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(p,3));g.computeVertexNormals();root.add(new T.Mesh(g,m));}}
+// All exposed pieces of the K-09 nose share one emissive material and keep their cold finishes.
+function rifleBarrel(frontZ){
+ const art=new PropParts();
+ const axis=[Math.PI/2,0,0];
+ for(const [radius,length,z,color] of [
+  [.023,.31,-.722,0x687b81], [.031,.079,-.869,0x28373c],
+  [.023,.008,-.911,0x1d2930], [.034,.042,frontZ,0x28373c]
+ ]){
+  art.add(new T.CylinderGeometry(radius,radius,length,12),color,[0,.025,z],axis);
+ }
+ art.box(0x687b81,[0,.071,frontZ],[.026,.060,.025]);
+ art.box(0x61b8a8,[0,.1165,frontZ],[.008,.047,.018]);
+ const material=new T.MeshPhongMaterial({
+  vertexColors:true,specular:0x313b3e,shininess:23,emissive:0xff3216,emissiveIntensity:0
+ });
+ return new T.Mesh(art.finish(),material);
+}
 export function buildModels(){
  const materials={
   dark:new T.MeshLambertMaterial({color:0x28373c}),
@@ -33,11 +50,8 @@ export function buildModels(){
   for(const [group,round]of [[square,false],[circle,true]]){const positions=[],colors=[],n=32;for(let i=0;i<n;i++)for(const [a,edge]of [[0,false],[i/n*Math.PI*2,true],[(i+1)/n*Math.PI*2,true]]){const cos=Math.cos(a),sin=Math.sin(a),radius=round?.036:.0318/Math.max(Math.abs(cos),Math.abs(sin));positions.push(edge?cos*radius:0,(edge?sin*radius:0)+.14,zRear+.002);colors.push(.39,.52,.67,edge?.19:.015);}const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(positions,3));g.setAttribute('color',new T.Float32BufferAttribute(colors,4));const glass=new T.Mesh(g,glassMaterial);glass.renderOrder=2;group.add(glass);
    const ticks=new T.BufferGeometry().setFromPoints([[-.012,0],[-.004,0],[.004,0],[.012,0],[0,-.012],[0,-.004]].map(([x,y])=>new T.Vector3(x,y+.14,zRear+.003)));const marks=new T.LineSegments(ticks,reticleMaterial);marks.renderOrder=3;group.add(marks);
   }
-  // Both selectable frames sit on the same pedestal, and the front bead meets its collar.
   box(g,.062,.034,.046,0,.083,zRear,'steel');
-  tube(g,.034,.042,0,.025,zFront,'dark');
-  box(g,.026,.060,.025,0,.071,zFront,'steel');
-  box(g,.008,.047,.018,0,.1165,zFront,'accent');return{rear,front,squareSight:square,circleSight:circle};
+  return{rear,front,squareSight:square,circleSight:circle};
  };
  const flash=(g,z)=>{const f=new T.Mesh(new T.ConeGeometry(.065,.16,5),new T.MeshBasicMaterial({color:0xffdc99,transparent:true,opacity:.9,depthWrite:false}));f.rotation.x=-Math.PI/2;f.position.set(0,.02,z);f.visible=false;g.add(f);return f;};
  const rifle=new T.Group();
@@ -58,9 +72,6 @@ export function buildModels(){
  panel(rifle,[[.245,.102,.103,.003],[.279,.123,.162,-.020],[.302,.119,.167,-.023]],'rubber');
  box(rifle,.078,.144,.061,0,-.116,.046).rotation.x=-.22;
  box(rifle,.014,.013,.114,0,-.099,-.025,'steel');
- tube(rifle,.023,.31,0,.025,-.722);
- tube(rifle,.031,.079,0,.025,-.869,'dark');
- tube(rifle,.023,.008,0,.025,-.911,'rubber');
  const mag=new T.Group();
  mag.position.set(0,-.13,-.13);rifle.add(mag);
  panel(mag,[[-.064,.063,.134,-.012],[-.044,.079,.178,-.018],[.034,.080,.181,-.022],[.055,.069,.132,-.026]],'steel').rotation.x=.08;
@@ -68,6 +79,7 @@ export function buildModels(){
  for(const side of [-1,1])for(let i=0;i<3;i++)box(mag,.007,.094,.011,side*.040,-.04,-.030+i*.026,'dark').rotation.x=.08;
  const rf=flash(rifle,-.94),rs=sight(rifle,.035,-.74);
  batch(mag);batch(rifle,[mag,rf,rs.squareSight,rs.circleSight]);
+ const barrel=rifleBarrel(rs.front.position.z);rifle.add(barrel);
 
  const shotgun=new T.Group();
  panel(shotgun,[[-.238,.094,.108,.002],[-.192,.143,.149,0],[.042,.146,.147,0],[.087,.124,.116,-.006]],'steel');
@@ -144,7 +156,7 @@ export function buildModels(){
 
  return [
   buildTalon(),
-  {root:rifle,mag,kind:'rifle',...rs,flash:rf,muzzle:rf},
+  {root:rifle,mag,barrel,kind:'rifle',...rs,flash:rf,muzzle:rf},
   {root:shotgun,pump,shell,kind:'shotgun',...ss,flash:sf,muzzle:sf},
   {root:pistol,slide,mag:pistolMag,kind:'pistol',...ps,flash:pf,muzzle:pf},
   {root:sniper,bolt,mag:sniperMag,kind:'sniper',...ns,flash:nf,muzzle:nf}

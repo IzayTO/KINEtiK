@@ -2,11 +2,11 @@ import * as T from './three.module.min.js';
 
 // Half-width, length, lifetime, lobes, width of the central flame and amber tip.
 const profiles={
- pistol:  {row:0,r:.095,length:.19,time:.062,lobes:4,core:.27,tip:37},
- rifle:   {row:1,r:.126,length:.32,time:.072,lobes:6,core:.24,tip:52},
- shotgun: {row:2,r:.217,length:.34,time:.101,lobes:7,core:.46,tip:24},
- sniper:  {row:3,r:.148,length:.49,time:.086,lobes:5,core:.21,tip:63},
- rocket:  {row:4,r:.192,length:.56,time:.146,lobes:4,core:.53,tip:30}
+ pistol:  {row:0,r:.150,length:.25,time:.080,lobes:4,core:.27,tip:37},
+ rifle:   {row:1,r:.215,length:.41,time:.091,lobes:6,core:.24,tip:52},
+ shotgun: {row:2,r:.310,length:.45,time:.120,lobes:7,core:.46,tip:24},
+ sniper:  {row:3,r:.226,length:.62,time:.108,lobes:5,core:.21,tip:63},
+ rocket:  {row:4,r:.287,length:.68,time:.146,lobes:4,core:.53,tip:30}
 };
 const saturate=x=>Math.min(1,Math.max(0,x));
 const smooth=x=>{x=saturate(x);return x*x*(3-2*x);};
@@ -42,6 +42,20 @@ function atlas(){
  const t=new T.DataTexture(rgba,w,h);t.colorSpace=T.SRGBColorSpace;
  t.minFilter=t.magFilter=T.LinearFilter;t.needsUpdate=true;return t;
 }
+// A soft, camera-facing corona remains visible when the flame sheets are edge-on.
+function glowTexture(){
+ const size=64,rgba=new Uint8Array(size*size*4);
+ for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+  const r=Math.hypot((2*x+1)/size-1,(2*y+1)/size-1);
+  const core=Math.exp(-9*r*r),alpha=Math.exp(-3.5*r*r)*(1-smooth((r-.65)/.35));
+  const i=(y*size+x)*4;
+  rgba[i]=255;rgba[i+1]=125+Math.round(110*core);
+  rgba[i+2]=42+Math.round(130*core);rgba[i+3]=Math.round(255*alpha);
+ }
+ const tex=new T.DataTexture(rgba,size,size);
+ tex.colorSpace=T.SRGBColorSpace;tex.minFilter=tex.magFilter=T.LinearFilter;tex.needsUpdate=true;
+ return tex;
+}
 const corners=[[0,0],[1,0],[1,1],[0,1]];
 function geometry(){
  const g=new T.BufferGeometry(),verts=[];
@@ -53,11 +67,14 @@ function geometry(){
  g.setIndex([0,1,2,0,2,3,4,5,6,4,6,7,8,9,10,8,10,11]);return g;
 }
 export function makeFlareFactory(){
- const map=atlas();
+ const map=atlas(),halo=glowTexture();
  return scene=>{
   const mat=new T.MeshBasicMaterial({map,side:T.DoubleSide,transparent:true,depthWrite:false,toneMapped:false});
   mat.forceSinglePass=true;
-  const mesh=new T.Mesh(geometry(),mat);mesh.visible=false;scene.add(mesh);
+  const mesh=new T.Mesh(geometry(),mat);
+  const glow=new T.Sprite(new T.SpriteMaterial({map:halo,blending:T.AdditiveBlending,depthWrite:false,toneMapped:false}));
+  glow.name='muzzleGlow';glow.position.z=-.19;mesh.add(glow);
+  mesh.renderOrder=1;mesh.visible=false;scene.add(mesh);
   return mesh;
  };
 }
@@ -79,4 +96,7 @@ export function animateFlare(mesh,time){
  const bloom=s.size*(.77+.34*smooth(t/.24))*(1-.48*t*t);
  mesh.scale.set(p.r*bloom,p.r*bloom,p.length*s.size*(.63+.48*smooth(t/.32))*(1-.38*t));
  mesh.material.opacity=(1-smooth((t-.19)/.81))*.97;
+ const glow=mesh.children[0];
+ glow.scale.setScalar(4.1+.55*smooth(t/.62));
+ glow.material.opacity=.78*(1-smooth((t-.12)/.88));
 }

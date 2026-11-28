@@ -11,7 +11,7 @@ export const HUD_ITEMS=[
  ['weapon-slots','Armas de fuego',200,58,.49,.93,1],['slot-knife','Cuchillo',47,44,.40,.79,1],['slot-grenade','Granada',47,44,.46,.79,1],['slot-molotov','Molotov',47,44,.52,.79,1],['slot-gas','Gas N-09',47,44,.58,.79,1],['slot-antidote','Antídoto',44,105,.34,.86,1],['slot-rc','RC explosivo',48,66,.26,.86,1],['slot-rocket','Lanzacohetes',55,66,.20,.86,1],['slot-airstrike','Apoyo aéreo',55,66,.14,.86,1],['objective-panel','Objetivos',180,110,.79,.38,0],['minimap','Minimapa',108,108,.095,.25,0],
  ['.weapon-info','Munición',190,65,.85,.19,0],
  ['consumable-slots','Consumibles',118,44,.45,.61,1],['kill-feed','Bajas',250,78,.32,.27,0],
- ['health-bar','Vida',156,30,.28,.88,0],['shield-bar','Escudo',156,30,.28,.80,0],['score-bar','Puntuación',176,34,.50,.07,0],['match-status','Partida',176,28,.50,.15,0],
+ ['health-bar','Vida',156,30,.28,.88,0],['shield-bar','Escudo',156,30,.28,.80,0],['score-bar','Puntuación',208,34,.50,.07,0],['match-status','Partida',208,28,.50,.15,0],
  ['.hud-actions','Menú',156,44,.87,.065,1]
 ];
 const copy=x=>JSON.parse(JSON.stringify(x));

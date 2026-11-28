@@ -167,7 +167,7 @@ function tick(now){
         const autoOrigin=throughScope?view.camera.position:aimOrigin;
         const autoRay=throughScope?view.camera.getWorldDirection(view.dir):ray;
         const automatic=!remote&&!match.player.held&&!match.player.throwAction&&!manual&&!!aimSupport.autoTarget(autoOrigin,autoRay,sample.aim&&view.aim>.65);
-        if(automatic){sample.fire=true;if((arsenal.selected===3||arsenal.selected===1&&arsenal.mode==='semi')&&arsenal.time+h>=arsenal.slots[arsenal.selected].ready)sample.fireStart=true;}
+        if(automatic){sample.fire=true;if(arsenal.triggerMode==='semi'&&arsenal.time+h>=arsenal.slots[arsenal.selected].ready)sample.fireStart=true;}
         const throwing=!!match.player.held||!!match.player.throwAction;
         if(!remote&&match.player.held==='rocket'&&sample.fireStart)match.ordnance.trigger(match.player,input.yaw,input.pitch);
         if(!remote&&throwing&&match.player.held!=='rocket'&&sample.fireRelease)match.ordnance.trigger(match.player,sample.fireRelease.yaw,sample.fireRelease.pitch);
@@ -222,12 +222,14 @@ function tick(now){
     const zone=level.zones.find(z=>Math.abs(player.x-z.x)<z.w/2&&Math.abs(player.z-z.z)<z.d/2);$('zone').textContent=zone?.name||'ENLACE EXTERIOR';
     minimap.update(now/1000,player,input.yaw,null,preferences.mapRotate);metrics.minimapMS=minimap.ms;document.querySelector('#minimap>span').textContent=preferences.mapRotate?'RUMBO / 09':'N ↑ / 09';
     $('ammo').textContent=arsenal.selected===0?'—':arsenal.ammo;$('weapon-name').textContent=arsenal.weapon.name;
-    $('fire-mode').textContent=arsenal.selected===1?arsenal.mode.toUpperCase():arsenal.selected===2?(arsenal.shotgunMode==='pump'?'CORREDERA':'TÁCTICO'):arsenal.selected===3?'SEMIAUTO':arsenal.selected===4?'CERROJO':'CUCHILLO';
+    const triggerLabel=arsenal.triggerMode?.toUpperCase();
+    $('fire-mode').textContent=triggerLabel||(arsenal.selected===2?(arsenal.shotgunMode==='pump'?'CORREDERA':'TÁCTICO'):arsenal.selected===4?'CERROJO':'CUCHILLO');
     $('ammo-status').textContent=arsenal.reload?'RECARGANDO':arsenal.selected===0?'AGARRE INVERTIDO':'/ '+arsenal.weapon.capacity+' · RESERVA '+arsenal.reserve;
     $('reload-progress').style.width=(arsenal.reloadProgress*100)+'%';
     document.querySelectorAll('#weapon-slots button').forEach(b=>b.classList.toggle('selected',!match.player.held&&+b.dataset.action.slice(4)===arsenal.selected));
     document.querySelector('.assist-button').classList.toggle('selected',preferences.assist);
-    document.querySelector('.mode-button').classList.toggle('selected',arsenal.selected===1&&arsenal.mode==='semi');document.querySelector('.mode-button small').textContent=arsenal.selected===1?arsenal.mode.toUpperCase():arsenal.selected===2?(arsenal.shotgunMode==='pump'?'BOMBA':'TÁCTICO'):arsenal.selected===3?'SEMI':arsenal.selected===4?'CERROJO':'FILO';
+    document.querySelector('.mode-button').classList.toggle('selected',arsenal.triggerMode==='semi');
+    document.querySelector('.mode-button small').textContent=triggerLabel||(arsenal.selected===2?(arsenal.shotgunMode==='pump'?'BOMBA':'TÁCTICO'):arsenal.selected===4?'CERROJO':'FILO');
     updateMatchHUD();fieldHUD.refresh();
     metrics.hudMS=performance.now()-hudStart;
     $('render-stats').textContent=`120 Hz · ${view.stats.calls} llamadas · ${Math.round(view.stats.triangles/1000)}k triángulos · ${Math.round(view.scale*100)}% píxel CSS · CPU física ${metrics.physicsMS.toFixed(2)} ms · envío render ${metrics.renderMS.toFixed(2)} ms · HUD ${metrics.hudMS.toFixed(2)} ms${diagnostic?' · QA SIN 3D':''}`;

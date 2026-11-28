@@ -139,7 +139,7 @@ export class CharmBatch{
  add(id,kind,base,swing=0,twist=0,soldier=false,slideZ=0,cant=0){
   const mount=charmMount(kind,soldier);if(!mount)return;
   const [x,y,z,size,yaw,drop]=mount,o=this.local;
-  o.position.set(x,y,z+slideZ);o.scale.setScalar(size);o.rotation.set(swing*.45,yaw*(1-.58*cant)+twist,swing,'YXZ');
+  o.position.set(x,y,z+slideZ);o.scale.setScalar(size);o.rotation.set(swing*.45,yaw*(1-.58*Math.abs(cant))+twist,swing,'YXZ');
   // The socket rolls with the weapon. Gravity keeps the hanging LEDs underneath it.
   if(cant)o.quaternion.premultiply(hang.setFromAxisAngle(rollAxis,.68*cant));
   o.updateMatrix();
